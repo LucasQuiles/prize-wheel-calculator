@@ -71,6 +71,20 @@ chrome.action.onClicked.addListener((tab) => {
   }
 });
 
+// Re-inject WebSocket tap and notify content script on each navigation
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'loading' &&
+      tab.url?.startsWith('https://www.whatnot.com/')) {
+    chrome.scripting.executeScript({
+      target: { tabId, allFrames: false },
+      world: 'MAIN',
+      files: ['ws_tap.js']
+    }).catch(() => {});
+    // trigger content.js to re-scrape & repaint immediately on each navigation
+    chrome.tabs.sendMessage(tabId, { kind: 'refresh' });
+  }
+});
+
 
 /* ---------- Relay messages from content-script ---------- */
 chrome.runtime.onMessage.addListener((pl) => send(pl));

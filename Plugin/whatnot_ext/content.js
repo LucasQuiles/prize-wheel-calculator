@@ -39,6 +39,11 @@
     }
   });
 
+  // Listen for background-triggered refresh
+  chrome.runtime.onMessage.addListener(msg => {
+    if (msg.kind === 'refresh') update();
+  });
+
   /* ---------- scraping logic ---------- */
   function scrape() {
     try {
@@ -85,6 +90,10 @@
     } catch (err) {
       console.error('[Whatnot-Sniffer] scrape error', err);
     }
+  }
+
+  function update() {
+    scrape();
   }
 
   /* ---------- initialise + observe ---------- */

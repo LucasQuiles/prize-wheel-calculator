@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Whatnot Sniffer",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Logs items, bids and sales from Whatnot live auctions.",
   "permissions": [
     "storage",
