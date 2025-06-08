@@ -53,11 +53,13 @@ chrome.webRequest.onCompleted.addListener(
   {
     urls: [
       'https://api.whatnot.com/v1/lives/*',
+      'https://api.whatnot.com/v1/lives/*/purchases*',
+      'https://api.whatnot.com/v1/lives/*/orders*',
       'https://api.whatnot.com/v1/lives/*/bids*',
       'https://api.whatnot.com/v1/lives/*/viewers*',
       'https://api.whatnot.com/v1/lives/*/products*'
     ],
-    types: ['xmlhttprequest']
+    types: ['xmlhttprequest', 'fetch']
   }
 );
 
