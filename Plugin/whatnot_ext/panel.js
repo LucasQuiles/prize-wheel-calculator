@@ -4,6 +4,40 @@
    so we *do not* call chrome.sidePanel.open() from here. */
 
 /* ---------- parsing helpers ---------- */
+function parseInfo(lines){
+  let host='\u2014', title='\u2014';
+  lines.forEach(l => {
+    try {
+      const j = JSON.parse(l);
+      if (j.kind==='api' && j.url.includes('/lives/') && j.json.page){
+        host  = j.json.page.hostUsername || host;
+        title = j.json.page.title        || title;
+      }
+      if (j.kind==='ws_event' && j.event==='livestream_update'){
+        host  = j.payload.hostUsername || host;
+        title = j.payload.title        || title;
+      }
+    } catch {}
+  });
+  return { host, title };
+}
+
+function parseBreakCounts(lines){
+  const map = {};
+  lines.forEach(l => {
+    try {
+      const j = JSON.parse(l);
+      if (j.kind==='ws_event' && j.event==='break_updated'){
+        const t = j.payload.title;
+        const sold  = parseInt(j.payload.filled_break_spots) || 0;
+        const total = parseInt(j.payload.total_break_spots)  || 0;
+        if (t) map[t] = { sold, total };
+      }
+    } catch {}
+  });
+  return map;
+}
+
 function parseItems(lines){
   const items=[];
   lines.forEach(l=>{try{
@@ -27,42 +61,19 @@ function parseItems(lines){
 }
 
 function parseBids(lines){
-  const bids = [];
-  lines.forEach(l => {
-    try {
-      const j = JSON.parse(l);
-      if (j.kind==='ws_event' && ['bid','new_bid'].includes(j.event)) {
-        let amt = j.payload?.amount
-                || j.payload?.bid_amount
-                || j.payload?.highestBid?.price?.amount;
-        const n = parseFloat(amt);
-        if(!isNaN(n)){
-          bids.push({
-            amount: n,
-            bidder: j.payload?.highestBidder?.username || '—'
-          });
-        }
+  const bids=[];
+  lines.forEach(l=>{try{
+    const j=JSON.parse(l);
+    if (j.kind==='ws_event' && j.event==='bid'){
+      const a=parseFloat(j.payload.amount);
+      if(!isNaN(a)){
+        bids.push({ amount:a, bidder:j.payload.bidder||'\u2014' });
       }
-    } catch (e) {}
-  });
+    }
+  }catch{} });
   return bids;
 }
 
-function parseBreakCounts(lines){
-  const map = {};
-  lines.forEach(l => {
-    try {
-      const j = JSON.parse(l);
-      if (j.kind === 'ws_event' && j.event === 'break_updated') {
-        const t = j.payload?.title;
-        const sold = parseInt(j.payload?.filled_break_spots);
-        const tot = parseInt(j.payload?.total_break_spots);
-        if (t) map[t] = { sold: isNaN(sold) ? 0 : sold, total: isNaN(tot) ? 0 : tot };
-      }
-    } catch (e) {}
-  });
-  return map;
-}
 
 function parseViewers(lines){
   let count = 0;
@@ -84,22 +95,6 @@ function parseViewers(lines){
   return count;
 }
 
-function parseInfo(lines){
-  let host='—';
-  let title='—';
-  lines.forEach(l=>{try{
-    const j=JSON.parse(l);
-    if(j.kind === 'api' && j.url?.includes('/lives/') && j.json?.page){
-      host  = j.json.page.hostUsername || host;
-      title = j.json.page.title || title;
-    }
-    if(j.kind==='ws_event' && j.event==='livestream_update'){
-      host = j.payload?.hostUsername || host;
-      title = j.payload?.title || title;
-    }
-  }catch(e){}});
-  return {host,title};
-}
 
 function viewerHistory(lines){
   const arr=[];
@@ -129,31 +124,16 @@ function totalRevenue(lines){
 }
 
 function parseSales(lines){
-  const sales = [];
-  lines.forEach(l => {
-    try {
-      const j = JSON.parse(l);
-      if ( j.kind==='sale'
-        || (j.kind==='ws_event' && ['sold','payment_succeeded','auction_ended'].includes(j.event))
-        || (j.kind==='ws_event' && j.event==='randomizer_result_event')
-        || (j.kind==='ws_event' && j.event==='product_updated' && j.payload?.product?.status==='SOLD')
-      ) {
-        const s = j.sale || j.payload || j.payload?.product || {};
-        const name  = s.item?.name || s.product?.name || s.result || '—';
-        const price = s.price
-                    || s.amount
-                    || s.soldPrice?.amount
-                    || (s.product?.soldPriceCents/100)
-                    || 0;
-        const buyer = s.buyer?.username
-                    || s.user?.username
-                    || s.purchaserUser?.username
-                    || s.buyer_username
-                    || '—';
-        sales.push({ name, price: parseFloat(price) || 0, buyer });
-      }
-    } catch(e){}
-  });
+  const sales=[];
+  lines.forEach(l=>{try{
+    const j=JSON.parse(l);
+    if (j.kind==='ws_event' && j.event==='sold'){
+      const name  = j.payload.item.name || '\u2014';
+      const price = parseFloat(j.payload.price) || 0;
+      const buyer = j.payload.buyer || '\u2014';
+      sales.push({ name, price, buyer });
+    }
+  }catch{} });
   return sales;
 }
 
@@ -175,73 +155,59 @@ function downloadLog(logStr){
 
 /* ---------- main update loop ---------- */
 function update(){
-  chrome.storage.local.get(['log'], d => {
-    const lines = (d.log || '').split('\n').filter(Boolean);
+  chrome.storage.local.get(['log'], d=>{
+    const lines = (d.log||'').split('\n').filter(Boolean);
 
-    // Info
-    const {host, title} = parseInfo(lines);
-    document.getElementById('hostName').textContent = host;
-    document.getElementById('streamTitle').textContent = title;
+    const { host, title } = parseInfo(lines);
+    document.getElementById('hostName').textContent   = host;
+    document.getElementById('streamTitle').textContent= title;
 
-    // Items, break counts and remaining totals
-    const items = parseItems(lines);
-    const sales = parseSales(lines);
+    const items    = parseItems(lines);
+    const sales    = parseSales(lines);
     const breakMap = parseBreakCounts(lines);
 
-    Object.keys(breakMap).forEach(t => { if(!items.includes(t)) items.push(t); });
+    Object.keys(breakMap).forEach(t=>{
+      if (!items.includes(t)) items.push(t);
+    });
 
     const counts = {};
-    items.forEach(i => {
-      counts[i] = breakMap[i] ? breakMap[i].sold : 0;
-    });
-    sales.forEach(s => { if(counts[s.name] !== undefined) counts[s.name]++; });
+    items.forEach(i=>{ counts[i] = breakMap[i]?.sold||0; });
+    sales.forEach(s=>{ if(counts[s.name]!=null) counts[s.name]++; });
 
     document.getElementById('tblItems').innerHTML =
       items.length
-        ? items.map(i => `<tr><td>${i}</td><td>${counts[i] || 0}</td></tr>`).join('')
+        ? items.map(i=>`<tr><td>${i}</td><td>${counts[i]}</td></tr>`).join('')
         : '<tr><td colspan="2">No items yet…</td></tr>';
 
-    const remaining = Object.keys(breakMap).length
-      ? Object.values(breakMap).reduce((sum,v)=>sum+(v.total-v.sold),0)
-      : items.length - sales.length;
-    document.getElementById('remaining').textContent =
-      `Items Remaining: ${remaining}`;
+    const remaining = Object.values(breakMap).reduce((sum,b)=>sum+(b.total-b.sold), items.length?0:0);
+    document.getElementById('remaining').textContent = `Items Remaining: ${remaining}`;
 
-    // Sales + Average
     document.getElementById('tblSales').innerHTML =
       sales.length
-        ? sales.map(s =>
-            `<tr><td>${s.name}</td><td>${s.buyer}</td><td>$${s.price.toFixed(2)}</td></tr>`
-          ).join('')
+        ? sales.map(s=>`<tr><td>${s.name}</td><td>${s.buyer}</td><td>$${s.price.toFixed(2)}</td></tr>`).join('')
         : '<tr><td colspan="3">No sales yet…</td></tr>';
     const avg = sales.length
-      ? (sales.reduce((sum, s) => sum + s.price, 0) / sales.length).toFixed(2)
+      ? (sales.reduce((sum,s)=>sum+s.price,0)/sales.length).toFixed(2)
       : '0.00';
-    document.getElementById('avgPrice').textContent =
-      `Average Sale Price: $${avg}`;
+    document.getElementById('avgPrice').textContent = `Average Sale Price: $${avg}`;
 
-    // Bids
     const bids = parseBids(lines);
     document.getElementById('tblBids').innerHTML =
       bids.length
-        ? bids.map(b => `<tr><td>$${b.amount.toFixed(2)}</td><td>${b.bidder}</td></tr>`).join('')
+        ? bids.map(b=>`<tr><td>$${b.amount.toFixed(2)}</td><td>${b.bidder}</td></tr>`).join('')
         : '<tr><td colspan="2">No bids yet…</td></tr>';
 
-    // Viewers
     const viewers = parseViewers(lines);
     document.getElementById('viewerCount').textContent = viewers;
 
-    // Debug only shows event summary
     const dbg = lines.slice(-200).reverse().map(l => {
       try { const j = JSON.parse(l); return `[${j.kind}] ${j.event || j.topic || j.url || ''}`; }
       catch { return l; }
     }).join('\n');
     document.getElementById('debug').textContent = dbg;
 
-    // Summary bar (optional)
     document.getElementById('summary').textContent =
-      summarise(items, sales, bids, viewers,
-                totalRevenue(lines));
+      summarise(items, sales, bids, viewers, totalRevenue(lines));
   });
 }
 

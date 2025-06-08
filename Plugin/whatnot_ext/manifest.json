@@ -29,7 +29,7 @@
   },
   "side_panel": {
     "default_path": "panel.html",
-    "open_panel_on_action_click": true
+    "openPanelOnActionClick": true
   },
   "web_accessible_resources": [
     {

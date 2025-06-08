@@ -72,8 +72,8 @@
           const amt = parseFloat(el.textContent.replace(/[^0-9.]/g, '')) || 0;
           window.postMessage({
             kind: 'ws_event',
-            event: 'new_bid',
-            payload: { amount: amt }
+            event: 'bid',
+            payload: { amount: amt, bidder: '\u2014' /* no DOM bidder available here */ }
           }, '*');
         }
       });
@@ -84,9 +84,9 @@
         if (!el.dataset.sniffed) {
           el.dataset.sniffed = '1';
           const price = parseFloat(el.textContent.replace(/[^0-9.]/g, '')) || 0;
-          const card = el.closest('[data-testid^="item"], .ItemCard');
-          const name = card?.querySelector('h2,h3,.title')?.textContent.trim() || '—';
-          const buyer = card?.querySelector('.buyer-username')?.textContent.trim() || '—';
+          const card = el.closest('[data-testid^="item"], .ItemCard, .item-card');
+          const name = card?.querySelector('h2,h3,[data-testid*="title"]')?.textContent.trim() || '—';
+          const buyer = card?.querySelector('.buyer-username, .BuyerUsername')?.textContent.trim() || '—';
           window.postMessage({
             kind: 'ws_event',
             event: 'sold',

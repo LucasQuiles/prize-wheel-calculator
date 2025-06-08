@@ -59,7 +59,7 @@ chrome.webRequest.onCompleted.addListener(
       'https://api.whatnot.com/v1/lives/*/viewers*',
       'https://api.whatnot.com/v1/lives/*/products*'
     ],
-    types: ['xmlhttprequest','fetch']
+    types: ['xmlhttprequest']
   }
 );
 
@@ -76,7 +76,7 @@ chrome.webRequest.onBeforeRequest.addListener(
 /* ---------- Toolbar icon opens the side-panel (user gesture) ---------- */
 chrome.action.onClicked.addListener((tab) => {
   if (chrome.sidePanel?.open && tab.id) {
-    chrome.storage.local.set({ log: '' });
+    chrome.storage.local.set({ log: '' });   // clear old session
     chrome.sidePanel.open({ tabId: tab.id });
   }
 });
