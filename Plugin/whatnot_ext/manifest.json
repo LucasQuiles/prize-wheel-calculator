@@ -6,10 +6,10 @@
   "permissions": [
     "storage",
     "webRequest",
+    "webRequestBlocking",
     "downloads",
     "activeTab",
-    "sidePanel",
-    "scripting"
+    "sidePanel"
   ],
   "host_permissions": [
     "https://www.whatnot.com/*",
