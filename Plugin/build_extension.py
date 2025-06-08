@@ -76,7 +76,7 @@ MANIFEST: dict = {
 }
 
 # Content script — executes in the livestream tab
-CONTENT_JS = rf"""
+CONTENT_JS = r"""
 (() => {{
   const ship = (pl) => fetch('{LOCAL_ENDPOINT}', {{
     method: 'POST', headers: {{'Content-Type':'application/json'}}, body: JSON.stringify(pl)
@@ -105,9 +105,10 @@ CONTENT_JS = rf"""
       return m || [];
     })
   )];
-  if (m3u8.length) ship({{kind:'m3u8', m3u8}});
-}})();
-"""
+    if (m3u8.length) ship({{kind:'m3u8', m3u8}});
+  }})();
+  """
+CONTENT_JS = CONTENT_JS.replace('{LOCAL_ENDPOINT}', LOCAL_ENDPOINT)
 
 # Background service‑worker — passive network observer
 BACKGROUND_JS = rf"""
