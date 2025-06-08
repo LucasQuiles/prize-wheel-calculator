@@ -30,19 +30,22 @@ chrome.webRequest.onCompleted.addListener(
         .then((r) => r.json())
         .then((j) => {
           send({ kind: 'api', url: d.url, json: j });
-          if (Array.isArray(j.items))    send({ kind: 'items', items: j.items });
-          if (Array.isArray(j.products)) send({ kind: 'items', items: j.products });
-          if (j.event && String(j.event).toLowerCase().includes('sold')) {
-            send({ kind: 'sale', sale: j });
-          }
+          if(Array.isArray(j.items))    send({ kind:'items', items:j.items });
+          if(Array.isArray(j.products)) send({ kind:'items', items:j.products });
+          if(j.event==='livestream_update')
+            send({ kind:'ws_event', event:'livestream_update', payload:j });
+          if(j.event && String(j.event).toLowerCase().includes('sold'))
+            send({ kind:'sale', sale:j });
           const arr = Array.isArray(j)
             ? j
             : Array.isArray(j.purchases)
-            ? j.purchases
-            : null;
-          if (arr) {
-            arr.forEach((p) => send({ kind: 'sale', sale: p }));
-          }
+              ? j.purchases
+              : Array.isArray(j.orders)
+                ? j.orders
+                : null;
+          if(arr) arr.forEach(p => send({ kind:'sale', sale:p }));
+          if(d.url.includes('/viewers'))
+            send({ kind:'api', event:'viewers', json:j });
         })
         .catch(() => { /* ignore JSON parse errors */ });
     }
@@ -56,7 +59,7 @@ chrome.webRequest.onCompleted.addListener(
       'https://api.whatnot.com/v1/lives/*/viewers*',
       'https://api.whatnot.com/v1/lives/*/products*'
     ],
-    types: ['xmlhttprequest']
+    types: ['xmlhttprequest','fetch']
   }
 );
 

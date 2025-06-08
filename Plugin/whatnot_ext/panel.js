@@ -31,10 +31,16 @@ function parseBids(lines){
   lines.forEach(l => {
     try {
       const j = JSON.parse(l);
-      if (j.kind === 'ws_event' && (j.event === 'bid' || j.event === 'new_bid')) {
-        const amt = parseFloat(j.payload?.amount || j.payload?.bid_amount);
-        if (!isNaN(amt)) {
-          bids.push({ amount: amt, bidder: j.payload?.highestBidder?.username || '—' });
+      if (j.kind==='ws_event' && ['bid','new_bid'].includes(j.event)) {
+        let amt = j.payload?.amount
+                || j.payload?.bid_amount
+                || j.payload?.highestBid?.price?.amount;
+        const n = parseFloat(amt);
+        if(!isNaN(n)){
+          bids.push({
+            amount: n,
+            bidder: j.payload?.highestBidder?.username || '—'
+          });
         }
       }
     } catch (e) {}
@@ -83,6 +89,10 @@ function parseInfo(lines){
   let title='—';
   lines.forEach(l=>{try{
     const j=JSON.parse(l);
+    if(j.kind === 'api' && j.url?.includes('/lives/') && j.json?.page){
+      host  = j.json.page.hostUsername || host;
+      title = j.json.page.title || title;
+    }
     if(j.kind==='ws_event' && j.event==='livestream_update'){
       host = j.payload?.hostUsername || host;
       title = j.payload?.title || title;
@@ -123,33 +133,24 @@ function parseSales(lines){
   lines.forEach(l => {
     try {
       const j = JSON.parse(l);
-      if (j.kind === 'sale' ||
-          (j.kind === 'ws_event' && (j.event === 'sold' || j.event === 'payment_succeeded'))) {
-        const s = j.sale || j.payload;
-        const name  = s?.item?.name
-                     || s?.product?.name
-                     || '—';
-        const price = parseFloat(s?.price || s?.amount || s?.soldPrice?.amount || s?.product?.soldPriceCents/100) || 0;
-        const buyer = s?.buyer?.username
-                     || s?.bidder?.username
-                     || s?.user?.username
-                     || s?.product?.purchaserUser?.username
-                     || '—';
-        sales.push({ name, price, buyer });
-      }
-      if(j.kind==='ws_event'&&j.event==='product_updated'){
-        const p=j.payload?.product;
-        if(p&& (p.status==='SOLD'||p.soldPriceCents||p.purchaserUser)){
-          const name=p.name||'—';
-          const price=parseFloat(p.soldPriceCents)/100||0;
-          const buyer=p.purchaserUser?.username||'—';
-          sales.push({name, price, buyer});
-        }
-      }
-      if(j.kind==='ws_event'&&j.event==='randomizer_result_event'){
-        const name=j.payload?.result||'—';
-        const buyer=j.payload?.buyer_username||'—';
-        sales.push({name, price:0, buyer});
+      if ( j.kind==='sale'
+        || (j.kind==='ws_event' && ['sold','payment_succeeded','auction_ended'].includes(j.event))
+        || (j.kind==='ws_event' && j.event==='randomizer_result_event')
+        || (j.kind==='ws_event' && j.event==='product_updated' && j.payload?.product?.status==='SOLD')
+      ) {
+        const s = j.sale || j.payload || j.payload?.product || {};
+        const name  = s.item?.name || s.product?.name || s.result || '—';
+        const price = s.price
+                    || s.amount
+                    || s.soldPrice?.amount
+                    || (s.product?.soldPriceCents/100)
+                    || 0;
+        const buyer = s.buyer?.username
+                    || s.user?.username
+                    || s.purchaserUser?.username
+                    || s.buyer_username
+                    || '—';
+        sales.push({ name, price: parseFloat(price) || 0, buyer });
       }
     } catch(e){}
   });

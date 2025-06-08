@@ -65,35 +65,33 @@
       }
 
       // 3a) Live bids
-      const bidSel = '[data-testid="current-bid" i], .current-bid';
-      Array.from(document.querySelectorAll(bidSel)).forEach(el => {
+      const bidEls = document.querySelectorAll('[data-testid="current-bid"], .current-bid');
+      bidEls.forEach(el => {
         if (!el.dataset.sniffed) {
           el.dataset.sniffed = '1';
-          send({
+          const amt = parseFloat(el.textContent.replace(/[^0-9.]/g, '')) || 0;
+          window.postMessage({
             kind: 'ws_event',
             event: 'new_bid',
-            payload: { amount: el.textContent.trim() }
-          });
+            payload: { amount: amt }
+          }, '*');
         }
       });
 
       // 3b) Sales (when an item sells, page inserts .sale-price)
-      const saleSel = '[data-testid="sale-price" i], .sale-price';
-      Array.from(document.querySelectorAll(saleSel)).forEach(el => {
+      const saleEls = document.querySelectorAll('[data-testid="sale-price"], .sale-price');
+      saleEls.forEach(el => {
         if (!el.dataset.sniffed) {
           el.dataset.sniffed = '1';
-          // find the parent item card to get the item name
-          const card = el.closest('[data-testid^="item" i], .ItemCard, .item-card');
-          const nameNode = card?.querySelector('[data-testid*="title" i], .title, h2, h3');
-          const itemName = nameNode?.textContent.trim() || '—';
-          send({
+          const price = parseFloat(el.textContent.replace(/[^0-9.]/g, '')) || 0;
+          const card = el.closest('[data-testid^="item"], .ItemCard');
+          const name = card?.querySelector('h2,h3,.title')?.textContent.trim() || '—';
+          const buyer = card?.querySelector('.buyer-username')?.textContent.trim() || '—';
+          window.postMessage({
             kind: 'ws_event',
             event: 'sold',
-            payload: {
-              price: parseFloat(el.textContent.replace(/[^0-9.]/g, '')) || 0,
-              item: { name: itemName }
-            }
-          });
+            payload: { price, item: { name }, buyer }
+          }, '*');
         }
       });
     } catch (err) {
