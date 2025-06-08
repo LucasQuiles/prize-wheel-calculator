@@ -3,12 +3,6 @@
 
 (() => {
   /* ---------- transport helpers ---------- */
-  const ship = (pl) => fetch('http://localhost:5001/ingest', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(pl)
-  }).catch(() => {});
-
   const log = (pl) => chrome.storage.local.get(['log'], (d = {}) => {
     const lines = (d.log || '').split('\n').filter(Boolean);
     lines.push(JSON.stringify(pl));
@@ -17,7 +11,6 @@
   });
   const send = (pl) => {
     log(pl);
-    ship(pl);
   };
 
   /* ---------- inject ws_tap.js for WebSocket tapping ---------- */
@@ -25,21 +18,24 @@
     if (window.__WS_TAP_INJECTED__) return;
     window.__WS_TAP_INJECTED__ = true;
     const s = document.createElement('script');
-    s.src = chrome.runtime.getURL('ws_tap.js');
-    s.onload = () => s.remove();
+    s.textContent = `(() => {
+      const O = window.WebSocket;
+      window.WebSocket = function(u, p){
+        const ws = new O(u, p);
+        ws.addEventListener('message', e => {
+          window.postMessage({kind:'ws_event', data:e.data}, '*');
+        });
+        return ws;
+      };
+    })();`;
     (document.documentElement || document.head || document.body).appendChild(s);
   }
   injectWSTap();
 
   /* ---------- Relay page → extension ---------- */
   window.addEventListener('message', (e) => {
-    if (e.source !== window || !e.data) return;
-    if (e.data.kind) {
-      // direct message (e.g. from ws_tap.js)
+    if (e.source === window && e.data && e.data.kind) {
       chrome.runtime.sendMessage(e.data);
-    } else if (e.data.__WHATNOT_SNIFFER__ && e.data.payload) {
-      // wrapped by ws_tap.js injection
-      chrome.runtime.sendMessage(e.data.payload);
     }
   });
 

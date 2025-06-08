@@ -6,7 +6,7 @@
   "permissions": [
     "storage",
     "webRequest",
-    "scripting",
+    "webRequestBlocking",
     "downloads",
     "activeTab",
     "sidePanel"
@@ -36,10 +36,5 @@
     "default_path": "panel.html",
     "open_panel_on_action_click": true
   },
-  "web_accessible_resources": [
-    {
-      "resources": ["ws_tap.js"],
-      "matches": ["<all_urls>"]
-    }
-  ]
+  "web_accessible_resources": []
 }

@@ -38,6 +38,18 @@ function parseViewers(lines){
   return count;
 }
 
+function viewerHistory(lines){
+  const arr=[];
+  lines.forEach(l=>{try{
+    const j=JSON.parse(l);
+    if(j.kind==='api' && j.url?.includes('/viewers')){
+      const c=j.json?.viewer_count||j.json?.count;
+      if(typeof c==='number') arr.push(c);
+    }
+  }catch(e){}});
+  return arr;
+}
+
 function totalRevenue(lines){
   let sum=0;
   lines.forEach(l=>{try{
@@ -109,10 +121,21 @@ function update(){
     // derived stats
     const bids = parseBids(lines);
     const viewers = parseViewers(lines);
+    const viewerHist = viewerHistory(lines);
     const revenue = totalRevenue(lines);
 
+    // bids table
+    document.getElementById('tblBids').innerHTML = bids.length ?
+      bids.map(b=>`<tr><td>${b}</td></tr>`).join('') :
+      '<tr><td>No bids yet…</td></tr>';
+
+    // viewers table
+    document.getElementById('tblViewers').innerHTML = viewerHist.length ?
+      viewerHist.map(v=>`<tr><td>${v}</td></tr>`).join('') :
+      '<tr><td>No viewer data…</td></tr>';
+
     // debug feed (newest first)
-    const dbg = lines.slice(-40).reverse().map(l=>{
+    const dbg = lines.slice(-200).reverse().map(l=>{
       try{
         const j=JSON.parse(l);
         return `[${j.kind}] ${j.event||j.topic||j.url||''}`;
@@ -121,7 +144,7 @@ function update(){
     document.getElementById('debug').textContent = dbg;
 
     // summary line
-    document.getElementById('summary').textContent = summarise(items,sales,bids,viewers,revenue);
+    document.getElementById('summaryText').textContent = summarise(items,sales,bids,viewers,revenue);
   });
 }
 

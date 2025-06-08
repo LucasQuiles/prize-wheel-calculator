@@ -5,15 +5,9 @@
 // • Captures API fetches for items, bids, sales, viewers via webRequest
 // • Logs WebSocket upgrades (optional) so you can verify the socket URL
 // • Stores the last 200 events in chrome.storage for the side-panel
-//   and ships them to the optional localhost ingest endpoint
 // • Opens the side-panel whenever the toolbar icon is clicked (user gesture)
 
 /* ---------- helpers ---------- */
-const ship = (pl) => fetch('http://localhost:5001/ingest', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(pl)
-}).catch(() => { /* ignore if server is down */ });
 
 const log = (pl) => chrome.storage.local.get(['log'], (d = {}) => {
   const lines = (d.log || '').split('\n').filter(Boolean);
@@ -24,7 +18,6 @@ const log = (pl) => chrome.storage.local.get(['log'], (d = {}) => {
 
 const send = (pl) => {
   log(pl);
-  ship(pl);
 };
 
 /* ---------- lifecycle ---------- */
@@ -50,7 +43,15 @@ chrome.webRequest.onCompleted.addListener(
         .catch(() => { /* ignore JSON parse errors */ });
     }
   },
-  { urls: ['https://api.whatnot.com/*'], types: ['xmlhttprequest', 'fetch'] }
+  {
+    urls: [
+      'https://api.whatnot.com/v1/lives/*',
+      'https://api.whatnot.com/v1/lives/*/bids*',
+      'https://api.whatnot.com/v1/lives/*/viewers*',
+      'https://api.whatnot.com/v1/lives/*/products*'
+    ],
+    types: ['xmlhttprequest']
+  }
 );
 
 /* ---------- WebSocket upgrade notifications (optional) ---------- */
@@ -70,25 +71,6 @@ chrome.action.onClicked.addListener((tab) => {
   }
 });
 
-/* ---------- Inject WebSocket patch into Whatnot pages ---------- */
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'loading' && tab.url?.startsWith('https://www.whatnot.com/')) {
-    chrome.scripting.executeScript({
-      target: { tabId, allFrames: false },
-      world: 'MAIN',
-      files: ['ws_tap.js']
-    })
-    .catch(() => {
-      // ignore failures (e.g. non-matching frame or missing file)
-    });
-  }
-});
 
 /* ---------- Relay messages from content-script ---------- */
-chrome.runtime.onMessage.addListener((msg, sender) => {
-  if (msg && msg.kind) {
-    send(msg);
-  }
-  // Return false so the SW can go idle
-  return false;
-});
+chrome.runtime.onMessage.addListener((pl) => send(pl));
