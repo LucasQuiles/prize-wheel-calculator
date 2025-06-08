@@ -1,72 +1,98 @@
+// content.js — CSP‑safe Whatnot Sniffer content script (v0.6.1)
+// Injected at document_start, relays WebSocket frames from page → extension → panel
 
-(function() {
-    const ship = (pl) => fetch('http://localhost:5001/ingest', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(pl)
-    }).catch(() => {});
-    const log = (pl) => chrome.storage.local.get(['log'], d => {
-        const lines = (d.log || '').split('\n').filter(Boolean);
-        lines.push(JSON.stringify(pl));
-        if (lines.length > 200) lines.shift();
-        chrome.storage.local.set({log: lines.join('\n')});
-    });
-    const send = (pl) => { log(pl); ship(pl); };
+(() => {
+  /* ---------- transport helpers ---------- */
+  const ship = (pl) => fetch('http://localhost:5001/ingest', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(pl)
+  }).catch(() => {});
 
-    // ---- WebSocket frame interceptor injected into page -----------------
-    function injectWSTap(){
-        const s = document.createElement('script');
-        s.textContent = '(' + function(){
-            const NativeWS = window.WebSocket;
-            window.WebSocket = function(url, proto){
-                const ws = new NativeWS(url, proto);
-                ws.addEventListener('message', ev => {
-                    try{
-                        const frame = JSON.parse(ev.data);
-                        if(Array.isArray(frame) && frame.length >= 5){
-                            const [, , topic, event, payload] = frame;
-                            window.postMessage({kind:'ws_event', topic, event, payload}, '*');
-                        }
-                    }catch{}
-                });
-                return ws;
-            };
-            window.WebSocket.prototype = NativeWS.prototype;
-        } + ')();';
-        document.documentElement.appendChild(s);
-        s.remove();
+  const log = (pl) => chrome.storage.local.get(['log'], (d = {}) => {
+    const lines = (d.log || '').split('\n').filter(Boolean);
+    lines.push(JSON.stringify(pl));
+    if (lines.length > 200) lines.shift();
+    chrome.storage.local.set({ log: lines.join('\n') });
+  });
+  const send = (pl) => {
+    log(pl);
+    ship(pl);
+  };
+
+  /* ---------- inject ws_tap.js for WebSocket tapping ---------- */
+  function injectWSTap() {
+    if (window.__WS_TAP_INJECTED__) return;
+    window.__WS_TAP_INJECTED__ = true;
+    const s = document.createElement('script');
+    s.src = chrome.runtime.getURL('ws_tap.js');
+    s.onload = () => s.remove();
+    (document.documentElement || document.head || document.body).appendChild(s);
+  }
+  injectWSTap();
+
+  /* ---------- Relay page → extension ---------- */
+  window.addEventListener('message', (e) => {
+    if (e.source !== window || !e.data) return;
+    if (e.data.kind) {
+      // direct message (e.g. from ws_tap.js)
+      chrome.runtime.sendMessage(e.data);
+    } else if (e.data.__WHATNOT_SNIFFER__ && e.data.payload) {
+      // wrapped by ws_tap.js injection
+      chrome.runtime.sendMessage(e.data.payload);
     }
-    injectWSTap();
+  });
 
-    window.addEventListener('message', e => {
-        if(e.source === window && e.data && e.data.kind){
-            chrome.runtime.sendMessage(e.data);
-        }
-    });
-
-    // __NEXT_DATA__
-    const nextEl = document.getElementById('__NEXT_DATA__');
-    if (nextEl) {
+  /* ---------- scraping logic ---------- */
+  function scrape() {
+    try {
+      // 1. __NEXT_DATA__ (SSR payload)
+      const nextEl = document.getElementById('__NEXT_DATA__');
+      if (nextEl && !nextEl.dataset.sniffed) {
+        nextEl.dataset.sniffed = '1';
         try {
-            const data = JSON.parse(nextEl.textContent);
-            send({kind:'next_data', data});
-            const items = data?.props?.pageProps?.items || data?.props?.pageProps?.live?.items;
-            if (Array.isArray(items) && items.length) send({kind:'items', items});
-        } catch(e) {}
+          const data = JSON.parse(nextEl.textContent);
+          send({ kind: 'next_data', data });
+          const items = data?.props?.pageProps?.items || data?.props?.pageProps?.live?.items;
+          if (Array.isArray(items) && items.length) send({ kind: 'items', items });
+        } catch (e) {}
+      }
+
+      // 2. Item cards in DOM
+      const cardSel = '[data-testid^="item" i],[data-test^="item" i],.ItemCard,.item-card';
+      const itemNodes = Array.from(document.querySelectorAll(cardSel));
+      if (itemNodes.length) {
+        const domItems = itemNodes.map((el) => {
+          const nameNode = el.querySelector('[data-testid*="title" i], .title, h2, h3');
+          return {
+            id: el.getAttribute('data-testid') || el.id || undefined,
+            name: (nameNode || el).textContent.trim(),
+            price: (el.querySelector('[data-testid$="price" i], .price') || {}).textContent?.trim(),
+          };
+        });
+        send({ kind: 'items', items: domItems });
+      }
+
+      // 3. Bid / sold prices in DOM
+      const priceSel = '[data-testid="current-bid" i],.current-bid,.sale-price';
+      Array.from(document.querySelectorAll(priceSel)).forEach((el) => {
+        if (!el.dataset.sniffed) {
+          el.dataset.sniffed = '1';
+          // Emit as ws_event so panel.parseBids sees it
+          send({ kind: 'ws_event', event: 'bid', payload: { amount: el.textContent.trim() } });
+        }
+      });
+    } catch (err) {
+      console.error('[Whatnot-Sniffer] scrape error', err);
     }
+  }
 
-    // Open Graph meta
-    const og = Array.from(document.querySelectorAll('meta[property^="og:"]')).map(m => {
-        return {k: m.getAttribute('property'), v: m.getAttribute('content')};
-    });
-    if (og.length) send({kind:'open_graph', og});
-
-    // m3u8 in inline scripts
-    const m3u8Pattern = /https?:\/\/[^\s'"\\]+?\.m3u8/g;
-    const m3u8 = [...new Set(
-        Array.from(document.scripts).flatMap(s => {
-            const matches = (s.textContent || '').match(m3u8Pattern);
-            return matches || [];
-        })
-    )];
-    if (m3u8.length) send({kind:'m3u8', m3u8});
+  /* ---------- initialise + observe ---------- */
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', scrape);
+  } else {
+    scrape();
+  }
+  const mo = new MutationObserver(scrape);
+  mo.observe(document.documentElement, { childList: true, subtree: true });
 })();

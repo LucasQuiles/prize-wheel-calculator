@@ -1,19 +1,19 @@
 {
   "manifest_version": 3,
-  "name": "Whatnot Live Sniffer",
-  "version": "0.4",
+  "name": "Whatnot Sniffer",
+  "version": "0.5.2",
+  "description": "Logs items, bids and sales from Whatnot live auctions.",
   "permissions": [
     "storage",
     "webRequest",
-    "webRequestBlocking",
-    "activeTab",
+    "scripting",
     "downloads",
+    "activeTab",
     "sidePanel"
   ],
   "host_permissions": [
     "https://www.whatnot.com/*",
-    "https://api.whatnot.com/*",
-    "https://*/*"
+    "https://api.whatnot.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -21,12 +21,12 @@
   "content_scripts": [
     {
       "matches": [
-        "https://www.whatnot.com/live/*"
+        "https://www.whatnot.com/*"
       ],
       "js": [
         "content.js"
       ],
-      "run_at": "document_idle"
+      "run_at": "document_start"
     }
   ],
   "action": {
@@ -34,6 +34,12 @@
   },
   "side_panel": {
     "default_path": "panel.html",
-    "openPanelOnActionClick": true
-  }
+    "open_panel_on_action_click": true
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["ws_tap.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }
