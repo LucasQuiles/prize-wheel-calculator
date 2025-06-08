@@ -28,10 +28,7 @@ document.getElementById('startBtn').addEventListener('click', () => {
   const statusEl = document.getElementById('status');
   if (url) {
     chrome.tabs.create({ url }, (tab) => {
-<<<<<<< ours
-=======
       chrome.storage.local.set({ trackedTab: tab.id });
->>>>>>> theirs
       if (chrome.sidePanel?.open) chrome.sidePanel.open({ tabId: tab.id });
     });
     statusEl.textContent = 'Opening ' + url + ' …';
@@ -39,10 +36,7 @@ document.getElementById('startBtn').addEventListener('click', () => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0] && tabs[0].url) {
         statusEl.textContent = 'Tracking active tab: ' + tabs[0].url;
-<<<<<<< ours
-=======
         chrome.storage.local.set({ trackedTab: tabs[0].id });
->>>>>>> theirs
         if (chrome.sidePanel?.open) chrome.sidePanel.open({ tabId: tabs[0].id });
       } else {
         statusEl.textContent = 'No active tab to track.';
