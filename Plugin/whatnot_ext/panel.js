@@ -77,14 +77,30 @@ function parseSales(lines){
   lines.forEach(l => {
     try {
       const j = JSON.parse(l);
-      if (j.kind === 'sale' || (j.kind==='ws_event' &&
-            (j.event==='sold'||j.event==='payment_succeeded'))) {
+      if (j.kind === 'sale' ||
+          (j.kind === 'ws_event' &&
+           (j.event === 'sold' || j.event === 'payment_succeeded'))) {
         const s = j.sale || j.payload;
-        const name  = s?.item?.name   || s?.item?.title   || '—';
-        const price = parseFloat(s?.price||s?.amount) || 0;
+        // (1) Name: could be in item, product or top-level
+        const name = s?.item?.name
+                   || s?.item?.title
+                   || s?.product?.name
+                   || s?.product?.title
+                   || s?.name
+                   || '—';
+        // (2) Price: try price, amount, soldPrice.amount or soldPriceCents
+        const rawPrice = s?.price
+                      ?? s?.amount
+                      ?? (s?.soldPrice?.amount)
+                      ?? (typeof s?.soldPriceCents === 'number'
+                          ? s.soldPriceCents/100
+                          : undefined);
+        const price = parseFloat(rawPrice) || 0;
+        // (3) Buyer: could live in buyer, bidder, user or purchaserUser
         const buyer = s?.buyer?.username
                    || s?.bidder?.username
-                   || s?.user?.name
+                   || s?.user?.username
+                   || s?.purchaserUser?.username
                    || '—';
         sales.push({ name, price, buyer });
       }
