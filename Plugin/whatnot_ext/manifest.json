@@ -1,15 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Whatnot Live Sniffer",
-  "version": "0.2",
+  "version": "0.4",
   "permissions": [
     "storage",
     "webRequest",
     "activeTab"
   ],
   "host_permissions": [
-    "https://www.whatnot.com/*",
-    "wss://www.whatnot.com/*"
+    "https://www.whatnot.com/*"
   ],
   "background": {
     "service_worker": "background.js"
