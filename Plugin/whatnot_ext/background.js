@@ -11,12 +11,22 @@ const log = (pl) => chrome.storage.local.get(['log'], d => {
 });
 const send = (pl) => { log(pl); ship(pl); };
 
+chrome.runtime.onInstalled.addListener(() => {
+  if (chrome.sidePanel?.setPanelBehavior) {
+    chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+  }
+});
+
 chrome.webRequest.onCompleted.addListener(
   (d) => {
     if (d.url.includes('/v1/lives/')) {
       fetch(d.url)
         .then(r => r.json())
-        .then(j => send({kind:'api',url:d.url,json:j}))
+        .then(j => {
+          send({kind:'api',url:d.url,json:j});
+          if (Array.isArray(j.items)) send({kind:'items', items:j.items});
+          if (j.event && j.event.toString().includes('sold')) send({kind:'sale', sale:j});
+        })
         .catch(() => {});
     }
   },

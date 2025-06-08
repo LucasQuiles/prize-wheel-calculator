@@ -57,7 +57,8 @@ MANIFEST: dict = {
     "action": {
         "default_popup": "popup.html",
         "default_title": "Whatnot Sniffer"
-    }
+    },
+    "side_panel": {"default_path": "panel.html"}
 }
 
 # Content script — executes in the livestream tab
@@ -155,18 +156,48 @@ document.getElementById('startBtn').addEventListener('click',()=>{
   const url=document.getElementById('auctionUrl').value.trim();
   const stat=document.getElementById('status');
   if(url){
-    chrome.tabs.create({url});
+    chrome.tabs.create({url},tab=>{if(chrome.sidePanel?.open)chrome.sidePanel.open({tabId:tab.id});});
     stat.textContent='Opening '+url+' …';
   }else{
     chrome.tabs.query({active:true,currentWindow:true},tabs=>{
       if(tabs[0]&&tabs[0].url){
         stat.textContent='Tracking active tab: '+tabs[0].url;
+        if(chrome.sidePanel?.open)chrome.sidePanel.open({tabId:tabs[0].id});
       }else{
         stat.textContent='No active tab to track.';
       }
     });
   }
 });
+"""
+
+PANEL_HTML = """<!DOCTYPE html>
+<html><head><meta charset='utf-8'>
+<style>body{font:13px sans-serif;width:320px;padding:8px}#items{margin-bottom:8px}pre{font-size:11px;white-space:pre-wrap}</style>
+</head><body>
+<h3>Whatnot Sniffer Panel</h3>
+<div id='items'>No items yet…</div>
+<pre id='log'></pre>
+<script src='panel.js'></script>
+</body></html>"""
+
+PANEL_JS = """
+function parseItems(lines){
+  const items=[];
+  lines.forEach(l=>{try{const j=JSON.parse(l);if(j.kind==='items'&&Array.isArray(j.items)){j.items.forEach(it=>{items.push(it.name||it.title||JSON.stringify(it));});}}catch{}});
+  return items;
+}
+function update(){
+  chrome.storage.local.get(['log'],d=>{
+    const log=d.log||'';
+    const lines=log.split('\n').filter(Boolean);
+    document.getElementById('log').textContent=log||'No data yet…';
+    const items=parseItems(lines);
+    document.getElementById('items').innerHTML=items.length?items.map(i=>`<div>${i}</div>`).join(''):'No items yet…';
+  });
+}
+chrome.storage.onChanged.addListener(c=>{if(c.log)update();});
+update();
 """
 
 SERVER_SNIPPET = """# minimal Flask receiver
@@ -200,6 +231,8 @@ def scaffold(out_dir: Path, force: bool):
     _write(out_dir/"background.js", BACKGROUND_JS)
     _write(out_dir/"popup.html", POPUP_HTML)
     _write(out_dir/"popup.js", POPUP_JS)
+    _write(out_dir/"panel.html", PANEL_HTML)
+    _write(out_dir/"panel.js", PANEL_JS)
     _write(out_dir/"server_snippet.py", SERVER_SNIPPET)
     print(f"✅ Extension scaffolded to {out_dir}\n→ chrome://extensions → Load unpacked (Developer mode)")
 

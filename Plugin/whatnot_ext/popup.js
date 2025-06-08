@@ -27,12 +27,15 @@ document.getElementById('startBtn').addEventListener('click', () => {
   const url = document.getElementById('auctionUrl').value.trim();
   const statusEl = document.getElementById('status');
   if (url) {
-    chrome.tabs.create({ url });
+    chrome.tabs.create({ url }, (tab) => {
+      if (chrome.sidePanel?.open) chrome.sidePanel.open({ tabId: tab.id });
+    });
     statusEl.textContent = 'Opening ' + url + ' …';
   } else {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0] && tabs[0].url) {
         statusEl.textContent = 'Tracking active tab: ' + tabs[0].url;
+        if (chrome.sidePanel?.open) chrome.sidePanel.open({ tabId: tabs[0].id });
       } else {
         statusEl.textContent = 'No active tab to track.';
       }

@@ -29,5 +29,8 @@
   "action": {
     "default_popup": "popup.html",
     "default_title": "Whatnot Sniffer"
+  },
+  "side_panel": {
+    "default_path": "panel.html"
   }
 }

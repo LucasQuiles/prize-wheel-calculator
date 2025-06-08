@@ -15,7 +15,12 @@
     // __NEXT_DATA__
     const nextEl = document.getElementById('__NEXT_DATA__');
     if (nextEl) {
-        try { send({kind:'next_data', data: JSON.parse(nextEl.textContent)}); } catch(e) {}
+        try {
+            const data = JSON.parse(nextEl.textContent);
+            send({kind:'next_data', data});
+            const items = data?.props?.pageProps?.items || data?.props?.pageProps?.live?.items;
+            if (Array.isArray(items) && items.length) send({kind:'items', items});
+        } catch(e) {}
     }
 
     // Open Graph meta
