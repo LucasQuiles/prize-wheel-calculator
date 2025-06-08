@@ -12,6 +12,25 @@
     });
     const send = (pl) => { log(pl); ship(pl); };
 
+    // ---- WebSocket frame interceptor (Phoenix) --------------------------
+    (function interceptWS(){
+        const NativeWS = window.WebSocket;
+        window.WebSocket = function(url, proto){
+            const ws = new NativeWS(url, proto);
+            ws.addEventListener('message', (ev) => {
+                try {
+                    const frame = JSON.parse(ev.data);
+                    if(Array.isArray(frame) && frame.length >= 5){
+                        const [, , topic, event, payload] = frame;
+                        send({kind:'ws_event', topic, event, payload});
+                    }
+                } catch(e) {}
+            });
+            return ws;
+        };
+        window.WebSocket.prototype = NativeWS.prototype;
+    })();
+
     // __NEXT_DATA__
     const nextEl = document.getElementById('__NEXT_DATA__');
     if (nextEl) {

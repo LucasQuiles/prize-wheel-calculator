@@ -12,13 +12,16 @@ const send = (pl) => { log(pl); ship(pl); };
 
 chrome.webRequest.onCompleted.addListener(
   (d) => {
-    if (d.url.includes('/v1/lives/')) {
+    if (/\/v1\/lives\/|\/items|\/products|\/purchases/.test(d.url)) {
       fetch(d.url)
         .then(r => r.json())
         .then(j => {
-          send({kind:'api',url:d.url,json:j});
+          send({kind:'api', url:d.url, json:j});
           if (Array.isArray(j.items)) send({kind:'items', items:j.items});
-          if (j.event && j.event.toString().includes('sold')) send({kind:'sale', sale:j});
+          if (Array.isArray(j.products)) send({kind:'items', items:j.products});
+          if (d.url.includes('/purchases') || d.url.includes('/orders') || (j.event && j.event.toString().includes('sold'))){
+            send({kind:'sale', sale:j});
+          }
         })
         .catch(() => {});
     }

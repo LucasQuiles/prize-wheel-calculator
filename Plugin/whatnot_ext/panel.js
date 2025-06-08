@@ -8,7 +8,19 @@ function parseItems(lines){
 
 function parseSales(lines){
   const sales=[];
-  lines.forEach(l=>{try{const j=JSON.parse(l);if(j.kind==='sale'){const s=j.sale;const name=s?.item?.name||s?.item?.title||'';sales.push(name||JSON.stringify(s));}}catch{}});
+  lines.forEach(l=>{
+    try{
+      const j=JSON.parse(l);
+      if(j.kind==='sale'){
+        const s=j.sale;
+        const name=s?.item?.name||s?.item?.title||'';
+        sales.push(name||JSON.stringify(s));
+      }else if(j.kind==='ws_event' && j.event==='sold'){
+        const name=j.payload?.item?.name||j.payload?.item?.title||'Sold event';
+        sales.push(name);
+      }
+    }catch{}
+  });
   return sales;
 }
 
@@ -37,6 +49,15 @@ function update(){
     document.getElementById('items').innerHTML = items.length ? items.map(i=>`<div>${i}</div>`).join('') : 'No items yet…';
     const sales = parseSales(lines);
     document.getElementById('sales').innerHTML = sales.length ? sales.map(s=>`<div>${s}</div>`).join('') : 'No sales yet…';
+
+    // live debug feed (newest first)
+    const dbg = lines.slice(-20).reverse().map(l=>{
+      try{
+        const j=JSON.parse(l);
+        return `[${j.kind}] ${j.event||j.topic||j.url||''}`;
+      }catch{return l;}
+    }).join('\n');
+    document.getElementById('debug').textContent = dbg;
 
     // summary
     document.getElementById('summary').textContent = summarise(items, sales);
