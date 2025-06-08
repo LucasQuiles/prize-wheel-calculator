@@ -77,11 +77,15 @@ function parseSales(lines){
   lines.forEach(l => {
     try {
       const j = JSON.parse(l);
-      if (j.kind === 'sale' || (j.kind === 'ws_event' && (j.event === 'sold' || j.event === 'payment_succeeded'))) {
+      if (j.kind === 'sale' || (j.kind==='ws_event' &&
+            (j.event==='sold'||j.event==='payment_succeeded'))) {
         const s = j.sale || j.payload;
-        const name = s?.item?.name || s?.item?.title || '';
-        const price = parseFloat(s?.price || s?.amount) || 0;
-        const buyer = s?.buyer?.username || s?.bidder?.username || s?.user?.name || '—';
+        const name  = s?.item?.name   || s?.item?.title   || '—';
+        const price = parseFloat(s?.price||s?.amount) || 0;
+        const buyer = s?.buyer?.username
+                   || s?.bidder?.username
+                   || s?.user?.name
+                   || '—';
         sales.push({ name, price, buyer });
       }
     } catch (e) {}
@@ -111,8 +115,8 @@ function update(){
     const log = d.log || '';
     const lines = log.split('\n').filter(Boolean);
 
-    // raw log text
-    document.getElementById('log').textContent = log || 'No data yet…';
+    // hide raw JSON—handled via debug feed
+    document.getElementById('log').textContent = '';
 
     // items table
     const items = parseItems(lines);

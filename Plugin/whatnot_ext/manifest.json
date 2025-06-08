@@ -9,7 +9,8 @@
     "webRequestBlocking",
     "downloads",
     "activeTab",
-    "sidePanel"
+    "sidePanel",
+    "scripting"
   ],
   "host_permissions": [
     "https://www.whatnot.com/*",
@@ -36,5 +37,10 @@
     "default_path": "panel.html",
     "open_panel_on_action_click": true
   },
-  "web_accessible_resources": []
+  "web_accessible_resources": [
+    {
+      "resources": ["ws_tap.js"],
+      "matches": ["https://www.whatnot.com/*"]
+    }
+  ]
 }

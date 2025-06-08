@@ -33,11 +33,18 @@ chrome.webRequest.onCompleted.addListener(
         .then((r) => r.json())
         .then((j) => {
           send({ kind: 'api', url: d.url, json: j });
-          if (Array.isArray(j.items)) send({ kind: 'items', items: j.items });
+          if (Array.isArray(j.items))    send({ kind: 'items', items: j.items });
           if (Array.isArray(j.products)) send({ kind: 'items', items: j.products });
-          if (d.url.includes('/purchases') || d.url.includes('/orders') ||
-              (j.event && String(j.event).toLowerCase().includes('sold'))) {
+          // handle live-sale events from WS
+          if (j.event && String(j.event).toLowerCase().includes('sold')) {
             send({ kind: 'sale', sale: j });
+          }
+          // handle purchases endpoint (array or nested property)
+          const arr = Array.isArray(j)       ? j
+                    : Array.isArray(j.purchases) ? j.purchases
+                    : null;
+          if (arr) {
+            arr.forEach(p => send({ kind: 'sale', sale: p }));
           }
         })
         .catch(() => { /* ignore JSON parse errors */ });

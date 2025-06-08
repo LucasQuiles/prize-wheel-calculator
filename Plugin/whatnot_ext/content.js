@@ -14,34 +14,24 @@
   };
 
   /* ---------- inject ws_tap.js for WebSocket tapping ---------- */
-  function injectWSTap() {
-    if (window.__WS_TAP_INJECTED__) return;
-    window.__WS_TAP_INJECTED__ = true;
-    const s = document.createElement('script');
-    s.textContent = `(() => {
-      const O = window.WebSocket;
-      window.WebSocket = function(u, p){
-        const ws = new O(u, p);
-        ws.addEventListener('message', e => {
-          window.postMessage({kind:'ws_event', data:e.data}, '*');
-        });
-        return ws;
-      };
-    })();`;
-    (document.documentElement || document.head || document.body).appendChild(s);
-  }
-  injectWSTap();
+  // No inline injection: rely on ws_tap.js from background.js
 
   /* ---------- Relay page → extension ---------- */
   window.addEventListener('message', (e) => {
-    if (e.source === window && e.data && e.data.kind) {
+    if (e.source !== window || !e.data) return;
+    // direct posts from ws_tap.js fallback (if any)
+    if (e.data.kind) {
       chrome.runtime.sendMessage(e.data);
+    }
+    // wrapped posts from ws_tap.js injected in MAIN world
+    else if (e.data.__WHATNOT_SNIFFER__ && e.data.payload && e.data.payload.kind) {
+      chrome.runtime.sendMessage(e.data.payload);
     }
   });
 
-  // Listen for background-triggered refresh
+  // re-run scrape() whenever background tells us to
   chrome.runtime.onMessage.addListener(msg => {
-    if (msg.kind === 'refresh') update();
+    if (msg.kind === 'refresh') scrape();
   });
 
   /* ---------- scraping logic ---------- */
