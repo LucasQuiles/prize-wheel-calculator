@@ -50,6 +50,11 @@ MANIFEST: dict = {
         "https://api.whatnot.com/*",
         "https://*/*"
     ],
+    "host_permissions": [
+        "https://www.whatnot.com/*",
+        "https://api.whatnot.com/*",
+        "https://*/*"
+    ],
     "background": {"service_worker": "background.js"},
     "content_scripts": [
         {
@@ -61,6 +66,8 @@ MANIFEST: dict = {
     "action": {
         "default_popup": "popup.html",
         "default_title": "Whatnot Sniffer"
+    },
+    "side_panel": {"default_path": "panel.html"}
     },
     "side_panel": {"default_path": "panel.html"}
 }
@@ -82,6 +89,14 @@ CONTENT_JS = rf"""
       if(Array.isArray(items) && items.length) ship({{kind:'items', items}});
     }} catch{{}}
   }}
+  if (nd) {{
+    try {{
+      const data = JSON.parse(nd.textContent);
+      ship({{kind:'next_data', data}});
+      const items = data?.props?.pageProps?.items || data?.props?.pageProps?.live?.items;
+      if(Array.isArray(items) && items.length) ship({{kind:'items', items}});
+    }} catch{{}}
+  }}
 
   // Open Graph meta
   const og = [...document.querySelectorAll('meta[property^="og:"]')].map(m=>({{k:m.getAttribute('property'),v:m.getAttribute('content')}}));
@@ -95,12 +110,29 @@ CONTENT_JS = rf"""
       return m || [];
     })
   )];
+  const m3u8Pattern = /https?:\\/\\/[^\\s'"\\\\]+?\\.m3u8/g;
+  const m3u8 = [...new Set(
+    [...document.scripts].flatMap(s => {
+      const m = (s.textContent || '').match(m3u8Pattern);
+      return m || [];
+    })
+  )];
   if (m3u8.length) ship({{kind:'m3u8', m3u8}});
 }})();
 """
 
 # Background service‑worker — passive network observer
 BACKGROUND_JS = rf"""
+// keep track of the tab being monitored so we can reopen the side panel
+let trackedTabId = null;
+chrome.storage.local.get(['trackedTab'], d => {{ trackedTabId = d.trackedTab || null; }});
+chrome.storage.onChanged.addListener(ch => {{ if(ch.trackedTab) trackedTabId = ch.trackedTab.newValue; }});
+chrome.tabs.onUpdated.addListener((tabId, info) => {{
+  if(tabId===trackedTabId && info.status==='complete'){{
+    if(chrome.sidePanel?.open) chrome.sidePanel.open({{tabId}});
+  }}
+}});
+
 // keep track of the tab being monitored so we can reopen the side panel
 let trackedTabId = null;
 chrome.storage.local.get(['trackedTab'], d => {{ trackedTabId = d.trackedTab || null; }});
@@ -136,6 +168,27 @@ chrome.webRequest.onBeforeRequest.addListener(
 """
 
 POPUP_HTML = """<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <style>
+      body{font:13px sans-serif;width:300px;padding:8px}
+      input[type=text]{width:100%;box-sizing:border-box;margin-bottom:6px}
+      button{width:100%;margin-bottom:6px}
+      #status{margin-bottom:6px;font-size:12px}
+      pre{font-size:11px;white-space:pre-wrap}
+    </style>
+  </head>
+  <body>
+    <h3>Whatnot Sniffer</h3>
+    <input id='auctionUrl' type='text' placeholder='Auction URL'>
+    <button id='startBtn'>Start</button>
+    <div id='status'></div>
+    <pre id='preview'></pre>
+    <pre id='log'></pre>
+    <script src='popup.js'></script>
+  </body>
+</html>"""
 <html>
   <head>
     <meta charset='utf-8'>
@@ -263,6 +316,8 @@ def scaffold(out_dir: Path, force: bool):
     _write(out_dir/"background.js", BACKGROUND_JS)
     _write(out_dir/"popup.html", POPUP_HTML)
     _write(out_dir/"popup.js", POPUP_JS)
+    _write(out_dir/"panel.html", PANEL_HTML)
+    _write(out_dir/"panel.js", PANEL_JS)
     _write(out_dir/"panel.html", PANEL_HTML)
     _write(out_dir/"panel.js", PANEL_JS)
     _write(out_dir/"server_snippet.py", SERVER_SNIPPET)

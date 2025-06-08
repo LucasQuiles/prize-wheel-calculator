@@ -19,27 +19,36 @@ const send = (pl) => {
   ship(pl);
 };
 
-// track which tab we're monitoring so the side panel can persist
+/* --------------------------------------------------------------------------
+   Side-panel tracking
+   -------------------------------------------------------------------------- */
 let trackedTabId = null;
+
 chrome.storage.local.get(['trackedTab'], (d) => {
   trackedTabId = d.trackedTab || null;
 });
+
 chrome.storage.onChanged.addListener((ch) => {
   if (ch.trackedTab) trackedTabId = ch.trackedTab.newValue;
 });
 
-// reopen the side panel whenever the tracked tab completes loading
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (tabId === trackedTabId && changeInfo.status === 'complete') {
-    if (chrome.sidePanel?.open) chrome.sidePanel.open({ tabId });
+    chrome.sidePanel?.open?.({ tabId });
   }
 });
 
-chrome.runtime.onInstalled.addListener(() => {
-  if (chrome.sidePanel?.setPanelBehavior) {
-    chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
-  }
-});
+/* Open panel on extension install / startup */
+function enablePanelOnClick() {
+  chrome.sidePanel?.setPanelBehavior?.({ openPanelOnActionClick: true });
+}
+
+chrome.runtime.onInstalled.addListener(enablePanelOnClick);
+chrome.runtime.onStartup.addListener(enablePanelOnClick);
+
+/* --------------------------------------------------------------------------
+   Network listeners
+   -------------------------------------------------------------------------- */
 
 // REST responses for /v1/lives/*
 chrome.webRequest.onCompleted.addListener(
