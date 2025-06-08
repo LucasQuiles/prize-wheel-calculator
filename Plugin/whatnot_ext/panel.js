@@ -151,7 +151,7 @@ function update(){
       `<tr><td>${viewers}</td></tr>`;
 
     // Debug only shows event summary
-    const dbg = lines.slice(-40).reverse().map(l => {
+    const dbg = lines.slice(-200).reverse().map(l => {
       try { const j = JSON.parse(l); return `[${j.kind}] ${j.event || j.topic || j.url || ''}`; }
       catch { return l; }
     }).join('\n');

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Whatnot Sniffer",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Logs items, bids and sales from Whatnot live auctions.",
   "permissions": [
     "storage",
@@ -20,12 +20,8 @@
   },
   "content_scripts": [
     {
-      "matches": [
-        "https://www.whatnot.com/*"
-      ],
-      "js": [
-        "content.js"
-      ],
+      "matches": ["https://www.whatnot.com/*"],
+      "js": ["content.js"],
       "run_at": "document_start"
     }
   ],

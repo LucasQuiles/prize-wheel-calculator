@@ -1,20 +1,18 @@
-// background.js — MV3 service-worker for Whatnot Sniffer (v0.6.1)
+// background.js — MV3 service-worker for Whatnot Sniffer (v0.6.2)
 // --------------------------------------------------------------
-// • Injects a WebSocket tap (ws_tap.js) into every Whatnot page *before*
-//   the first socket opens (document_start / MAIN world)
-// • Captures API fetches for items, bids, sales, viewers via webRequest
-// • Logs WebSocket upgrades (optional) so you can verify the socket URL
-// • Stores the last 200 events in chrome.storage for the side-panel
-// • Opens the side-panel whenever the toolbar icon is clicked (user gesture)
+// • Injects ws_tap.js into every Whatnot page before the first socket opens
+// • Captures API requests (items, bids, purchases, viewers) via webRequest
+// • Stores last 200 events in chrome.storage for the side-panel
+// • Opens side-panel on toolbar-click (user gesture)
 
 /* ---------- helpers ---------- */
-
-const log = (pl) => chrome.storage.local.get(['log'], (d = {}) => {
-  const lines = (d.log || '').split('\n').filter(Boolean);
-  lines.push(JSON.stringify(pl));
-  if (lines.length > 200) lines.shift();
-  chrome.storage.local.set({ log: lines.join('\n') });
-});
+const log = (pl) =>
+  chrome.storage.local.get(['log'], (d = {}) => {
+    const lines = (d.log || '').split('\n').filter(Boolean);
+    lines.push(JSON.stringify(pl));
+    if (lines.length > 200) lines.shift();
+    chrome.storage.local.set({ log: lines.join('\n') });
+  });
 
 const send = (pl) => {
   log(pl);
@@ -27,7 +25,6 @@ self.addEventListener('activate', () => console.log('[Whatnot Sniffer] SW activa
 /* ---------- API traffic capture ---------- */
 chrome.webRequest.onCompleted.addListener(
   (d) => {
-    // match lives metadata, items/products lists, purchases/orders, bids, viewers
     if (/\/v1\/lives\/|\/items|\/products|\/purchases|\/orders|\/bids|\/viewers/.test(d.url)) {
       fetch(d.url, { credentials: 'include' })
         .then((r) => r.json())
@@ -35,16 +32,16 @@ chrome.webRequest.onCompleted.addListener(
           send({ kind: 'api', url: d.url, json: j });
           if (Array.isArray(j.items))    send({ kind: 'items', items: j.items });
           if (Array.isArray(j.products)) send({ kind: 'items', items: j.products });
-          // handle live-sale events from WS
           if (j.event && String(j.event).toLowerCase().includes('sold')) {
             send({ kind: 'sale', sale: j });
           }
-          // handle purchases endpoint (array or nested property)
-          const arr = Array.isArray(j)       ? j
-                    : Array.isArray(j.purchases) ? j.purchases
-                    : null;
+          const arr = Array.isArray(j)
+            ? j
+            : Array.isArray(j.purchases)
+            ? j.purchases
+            : null;
           if (arr) {
-            arr.forEach(p => send({ kind: 'sale', sale: p }));
+            arr.forEach((p) => send({ kind: 'sale', sale: p }));
           }
         })
         .catch(() => { /* ignore JSON parse errors */ });
@@ -59,7 +56,7 @@ chrome.webRequest.onCompleted.addListener(
       'https://api.whatnot.com/v1/lives/*/viewers*',
       'https://api.whatnot.com/v1/lives/*/products*'
     ],
-    types: ['xmlhttprequest', 'fetch']
+    types: ['xmlhttprequest']
   }
 );
 
@@ -73,29 +70,29 @@ chrome.webRequest.onBeforeRequest.addListener(
   { urls: ['<all_urls>'], types: ['websocket'] }
 );
 
-/* ---------- Toolbar icon opens the side-panel (user-gesture) ---------- */
+/* ---------- Toolbar icon opens the side-panel (user gesture) ---------- */
 chrome.action.onClicked.addListener((tab) => {
   if (chrome.sidePanel?.open && tab.id) {
-    // wipe previous session
     chrome.storage.local.set({ log: '' });
     chrome.sidePanel.open({ tabId: tab.id });
   }
 });
 
-// Re-inject WebSocket tap and notify content script on each navigation
+/* ---------- Inject WebSocket tap + refresh on navigation ---------- */
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'loading' &&
-      tab.url?.startsWith('https://www.whatnot.com/')) {
-    chrome.scripting.executeScript({
-      target: { tabId, allFrames: false },
-      world: 'MAIN',
-      files: ['ws_tap.js']
-    }).catch(() => {});
-    // trigger content.js to re-scrape & repaint immediately on each navigation
+  if (changeInfo.status === 'loading' && tab.url?.startsWith('https://www.whatnot.com/')) {
+    chrome.scripting
+      .executeScript({
+        target: { tabId, allFrames: false },
+        world: 'MAIN',
+        files: ['ws_tap.js']
+      })
+      .catch(() => { /* ignore */ });
     chrome.tabs.sendMessage(tabId, { kind: 'refresh' });
   }
 });
 
-
 /* ---------- Relay messages from content-script ---------- */
-chrome.runtime.onMessage.addListener((pl) => send(pl));
+chrome.runtime.onMessage.addListener((pl) => {
+  send(pl);
+});
