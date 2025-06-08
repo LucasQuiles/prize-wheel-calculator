@@ -5,7 +5,8 @@
   "permissions": [
     "storage",
     "webRequest",
-    "activeTab"
+    "activeTab",
+    "downloads"
   ],
   "host_permissions": [
     "https://www.whatnot.com/*",

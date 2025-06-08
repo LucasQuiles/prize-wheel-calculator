@@ -9,10 +9,26 @@ pre{font-size:11px;white-space:pre-wrap}
 </style>
 </head>
 <body>
-<h3>Whatnot Sniffer Panel</h3>
+<h3>Whatnot Sniffer</h3>
+
+<!-- URL entry & Start -->
+<input id="auctionUrl" type="text" placeholder="Auction URL (leave blank to track current tab)" />
+<button id="startBtn">Start / Track</button>
+<div id="status"></div>
+
+<!-- Summary -->
+<pre id="summary"></pre>
+
+<!-- Live lists -->
+<h4>Items</h4>
 <div id="items">No items yet…</div>
+<h4>Sales</h4>
 <div id="sales">No sales yet…</div>
+
+<!-- Raw log & download -->
+<button id="saveBtn">Save log as JSON</button>
 <pre id="log"></pre>
+
 <script src="panel.js"></script>
 </body>
 </html>

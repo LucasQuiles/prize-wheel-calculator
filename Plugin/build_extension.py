@@ -43,8 +43,13 @@ MANIFEST: dict = {
     "manifest_version": 3,
     "name": "Whatnot Live Sniffer",
     "version": "0.4",
-    "permissions": ["storage", "webRequest", "activeTab"],
+    "permissions": ["storage", "webRequest", "activeTab", "downloads"],
     # MV3 host_permissions must be http/https only
+    "host_permissions": [
+        "https://www.whatnot.com/*",
+        "https://api.whatnot.com/*",
+        "https://*/*"
+    ],
     "host_permissions": [
         "https://www.whatnot.com/*",
         "https://api.whatnot.com/*",
@@ -68,8 +73,6 @@ MANIFEST: dict = {
         "default_title": "Whatnot Sniffer"
     },
     "side_panel": {"default_path": "panel.html"}
-    },
-    "side_panel": {"default_path": "panel.html"}
 }
 
 # Content script — executes in the livestream tab
@@ -81,14 +84,6 @@ CONTENT_JS = rf"""
 
   // __NEXT_DATA__
   const nd = document.getElementById('__NEXT_DATA__');
-  if (nd) {{
-    try {{
-      const data = JSON.parse(nd.textContent);
-      ship({{kind:'next_data', data}});
-      const items = data?.props?.pageProps?.items || data?.props?.pageProps?.live?.items;
-      if(Array.isArray(items) && items.length) ship({{kind:'items', items}});
-    }} catch{{}}
-  }}
   if (nd) {{
     try {{
       const data = JSON.parse(nd.textContent);
@@ -110,29 +105,12 @@ CONTENT_JS = rf"""
       return m || [];
     })
   )];
-  const m3u8Pattern = /https?:\\/\\/[^\\s'"\\\\]+?\\.m3u8/g;
-  const m3u8 = [...new Set(
-    [...document.scripts].flatMap(s => {
-      const m = (s.textContent || '').match(m3u8Pattern);
-      return m || [];
-    })
-  )];
   if (m3u8.length) ship({{kind:'m3u8', m3u8}});
 }})();
 """
 
 # Background service‑worker — passive network observer
 BACKGROUND_JS = rf"""
-// keep track of the tab being monitored so we can reopen the side panel
-let trackedTabId = null;
-chrome.storage.local.get(['trackedTab'], d => {{ trackedTabId = d.trackedTab || null; }});
-chrome.storage.onChanged.addListener(ch => {{ if(ch.trackedTab) trackedTabId = ch.trackedTab.newValue; }});
-chrome.tabs.onUpdated.addListener((tabId, info) => {{
-  if(tabId===trackedTabId && info.status==='complete'){{
-    if(chrome.sidePanel?.open) chrome.sidePanel.open({{tabId}});
-  }}
-}});
-
 // keep track of the tab being monitored so we can reopen the side panel
 let trackedTabId = null;
 chrome.storage.local.get(['trackedTab'], d => {{ trackedTabId = d.trackedTab || null; }});
@@ -189,27 +167,6 @@ POPUP_HTML = """<!DOCTYPE html>
     <script src='popup.js'></script>
   </body>
 </html>"""
-<html>
-  <head>
-    <meta charset='utf-8'>
-    <style>
-      body{font:13px sans-serif;width:300px;padding:8px}
-      input[type=text]{width:100%;box-sizing:border-box;margin-bottom:6px}
-      button{width:100%;margin-bottom:6px}
-      #status{margin-bottom:6px;font-size:12px}
-      pre{font-size:11px;white-space:pre-wrap}
-    </style>
-  </head>
-  <body>
-    <h3>Whatnot Sniffer</h3>
-    <input id='auctionUrl' type='text' placeholder='Auction URL'>
-    <button id='startBtn'>Start</button>
-    <div id='status'></div>
-    <pre id='preview'></pre>
-    <pre id='log'></pre>
-    <script src='popup.js'></script>
-  </body>
-</html>"""
 
 POPUP_JS = """
 function updateLogDisplay(logStr){
@@ -230,23 +187,16 @@ document.getElementById('startBtn').addEventListener('click',()=>{
   const url=document.getElementById('auctionUrl').value.trim();
   const stat=document.getElementById('status');
   if(url){
-<<<<<<< ours
-    chrome.tabs.create({url},tab=>{if(chrome.sidePanel?.open)chrome.sidePanel.open({tabId:tab.id});});
-=======
     chrome.tabs.create({url},tab=>{
       chrome.storage.local.set({trackedTab:tab.id});
       if(chrome.sidePanel?.open)chrome.sidePanel.open({tabId:tab.id});
     });
->>>>>>> theirs
     stat.textContent='Opening '+url+' …';
   }else{
     chrome.tabs.query({active:true,currentWindow:true},tabs=>{
       if(tabs[0]&&tabs[0].url){
         stat.textContent='Tracking active tab: '+tabs[0].url;
-<<<<<<< ours
-=======
         chrome.storage.local.set({trackedTab:tabs[0].id});
->>>>>>> theirs
         if(chrome.sidePanel?.open)chrome.sidePanel.open({tabId:tabs[0].id});
       }else{
         stat.textContent='No active tab to track.';
@@ -258,11 +208,24 @@ document.getElementById('startBtn').addEventListener('click',()=>{
 
 PANEL_HTML = """<!DOCTYPE html>
 <html><head><meta charset='utf-8'>
-<style>body{font:13px sans-serif;width:320px;padding:8px}#items{margin-bottom:8px}pre{font-size:11px;white-space:pre-wrap}</style>
+<style>body{font:13px sans-serif;width:320px;padding:8px}#items,#sales{margin-bottom:8px}pre{font-size:11px;white-space:pre-wrap}</style>
 </head><body>
-<h3>Whatnot Sniffer Panel</h3>
+<h3>Whatnot Sniffer</h3>
+
+<input id='auctionUrl' type='text' placeholder='Auction URL (leave blank to track current tab)'>
+<button id='startBtn'>Start / Track</button>
+<div id='status'></div>
+
+<pre id='summary'></pre>
+
+<h4>Items</h4>
 <div id='items'>No items yet…</div>
+<h4>Sales</h4>
+<div id='sales'>No sales yet…</div>
+
+<button id='saveBtn'>Save log as JSON</button>
 <pre id='log'></pre>
+
 <script src='panel.js'></script>
 </body></html>"""
 
@@ -272,6 +235,21 @@ function parseItems(lines){
   lines.forEach(l=>{try{const j=JSON.parse(l);if(j.kind==='items'&&Array.isArray(j.items)){j.items.forEach(it=>{items.push(it.name||it.title||JSON.stringify(it));});}}catch{}});
   return items;
 }
+function parseSales(lines){
+  const sales=[];
+  lines.forEach(l=>{try{const j=JSON.parse(l);if(j.kind==='sale'){const s=j.sale;const name=s?.item?.name||s?.item?.title||'';sales.push(name||JSON.stringify(s));}}catch{}});
+  return sales;
+}
+function summarise(items, sales){
+  const pct=items.length?((sales.length/items.length)*100).toFixed(1)+'%':'—';
+  return `\nItems found : ${items.length}\nSold items  : ${sales.length}\nSell-through: ${pct}\nLast update : ${new Date().toLocaleTimeString()}`.trim();
+}
+function downloadLog(logStr){
+  const blob=new Blob([logStr],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const fname=`whatnot_auction_${Date.now()}.json`;
+  chrome.downloads.download({url,filename:fname,saveAs:true});
+}
 function update(){
   chrome.storage.local.get(['log'],d=>{
     const log=d.log||'';
@@ -279,10 +257,24 @@ function update(){
     document.getElementById('log').textContent=log||'No data yet…';
     const items=parseItems(lines);
     document.getElementById('items').innerHTML=items.length?items.map(i=>`<div>${i}</div>`).join(''):'No items yet…';
+    const sales=parseSales(lines);
+    document.getElementById('sales').innerHTML=sales.length?sales.map(s=>`<div>${s}</div>`).join(''):'No sales yet…';
+    document.getElementById('summary').textContent=summarise(items,sales);
   });
 }
 chrome.storage.onChanged.addListener(c=>{if(c.log)update();});
 update();
+document.getElementById('startBtn').addEventListener('click',()=>{
+  const url=document.getElementById('auctionUrl').value.trim();
+  const status=document.getElementById('status');
+  const openPanel=tab=>{chrome.storage.local.set({trackedTab:tab.id});if(chrome.sidePanel?.open)chrome.sidePanel.open({tabId:tab.id});};
+  if(url){
+    chrome.tabs.create({url},tab=>{openPanel(tab);status.textContent='Opening '+url+' …';});
+  }else{
+    chrome.tabs.query({active:true,currentWindow:true},tabs=>{if(tabs[0]&&tabs[0].url){openPanel(tabs[0]);status.textContent='Tracking active tab: '+tabs[0].url;}else{status.textContent='No active tab to track.';}});
+  }
+});
+document.getElementById('saveBtn').addEventListener('click',()=>{chrome.storage.local.get(['log'],d=>downloadLog(d.log||'[]'));});
 """
 
 SERVER_SNIPPET = """# minimal Flask receiver
@@ -316,8 +308,6 @@ def scaffold(out_dir: Path, force: bool):
     _write(out_dir/"background.js", BACKGROUND_JS)
     _write(out_dir/"popup.html", POPUP_HTML)
     _write(out_dir/"popup.js", POPUP_JS)
-    _write(out_dir/"panel.html", PANEL_HTML)
-    _write(out_dir/"panel.js", PANEL_JS)
     _write(out_dir/"panel.html", PANEL_HTML)
     _write(out_dir/"panel.js", PANEL_JS)
     _write(out_dir/"server_snippet.py", SERVER_SNIPPET)
