@@ -76,7 +76,13 @@ CONTENT_JS = rf"""
   if (og.length) ship({{kind:'open_graph', og}});
 
   // m3u8 URLs inside inline scripts
-  const m3u8 = [...new Set([...document.scripts].flatMap(s=>((s.textContent)||'').match(/https?:\\/\\/[^'\"\s]+?\.m3u8/g)||[]))];
+  const m3u8Pattern = /https?:\\/\\/[^\\s'"\\\\]+?\\.m3u8/g;
+  const m3u8 = [...new Set(
+    [...document.scripts].flatMap(s => {
+      const m = (s.textContent || '').match(m3u8Pattern);
+      return m || [];
+    })
+  )];
   if (m3u8.length) ship({{kind:'m3u8', m3u8}});
 }})();
 """
@@ -108,19 +114,58 @@ chrome.webRequest.onBeforeRequest.addListener(
 """
 
 POPUP_HTML = """<!DOCTYPE html>
-<html><head><meta charset='utf-8'><style>body{font:13px sans-serif;width:300px;padding:8px}</style></head>
-<body>
-<h3>Whatnot Sniffer</h3>
-<pre id="log" style="font-size:11px;white-space:pre-wrap"></pre>
-<script src="popup.js"></script>
-</body></html>"""
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <style>
+      body{font:13px sans-serif;width:300px;padding:8px}
+      input[type=text]{width:100%;box-sizing:border-box;margin-bottom:6px}
+      button{width:100%;margin-bottom:6px}
+      #status{margin-bottom:6px;font-size:12px}
+      pre{font-size:11px;white-space:pre-wrap}
+    </style>
+  </head>
+  <body>
+    <h3>Whatnot Sniffer</h3>
+    <input id='auctionUrl' type='text' placeholder='Auction URL'>
+    <button id='startBtn'>Start</button>
+    <div id='status'></div>
+    <pre id='preview'></pre>
+    <pre id='log'></pre>
+    <script src='popup.js'></script>
+  </body>
+</html>"""
 
 POPUP_JS = """
-chrome.storage.local.get(['log'], (d)=>{
-  document.getElementById('log').textContent = d.log||'No data yet…';
-});
-chrome.storage.onChanged.addListener((c)=>{
-  if(c.log) document.getElementById('log').textContent = c.log.newValue;
+function updateLogDisplay(logStr){
+  const log=document.getElementById('log');
+  const prev=document.getElementById('preview');
+  log.textContent=logStr||'No data yet…';
+  if(logStr){
+    const lines=logStr.split('\n').filter(Boolean);
+    const last=lines[lines.length-1];
+    if(last){
+      try{prev.textContent=JSON.stringify(JSON.parse(last),null,2);}catch{prev.textContent=last;}
+    }
+  }
+}
+chrome.storage.local.get(['log'],d=>{updateLogDisplay(d.log||'');});
+chrome.storage.onChanged.addListener(c=>{if(c.log)updateLogDisplay(c.log.newValue);});
+document.getElementById('startBtn').addEventListener('click',()=>{
+  const url=document.getElementById('auctionUrl').value.trim();
+  const stat=document.getElementById('status');
+  if(url){
+    chrome.tabs.create({url});
+    stat.textContent='Opening '+url+' …';
+  }else{
+    chrome.tabs.query({active:true,currentWindow:true},tabs=>{
+      if(tabs[0]&&tabs[0].url){
+        stat.textContent='Tracking active tab: '+tabs[0].url;
+      }else{
+        stat.textContent='No active tab to track.';
+      }
+    });
+  }
 });
 """
 

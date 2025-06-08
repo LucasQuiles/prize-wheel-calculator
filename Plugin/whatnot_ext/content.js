@@ -25,6 +25,12 @@
     if (og.length) send({kind:'open_graph', og});
 
     // m3u8 in inline scripts
-    const m3u8 = [...new Set(Array.from(document.scripts).flatMap(s => (s.textContent||'').match(/https?:\\/\\/[^'\" ]+\\.m3u8/g)||[]))];
+    const m3u8Pattern = /https?:\/\/[^\s'"\\]+?\.m3u8/g;
+    const m3u8 = [...new Set(
+        Array.from(document.scripts).flatMap(s => {
+            const matches = (s.textContent || '').match(m3u8Pattern);
+            return matches || [];
+        })
+    )];
     if (m3u8.length) send({kind:'m3u8', m3u8});
 })();
