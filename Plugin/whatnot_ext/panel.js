@@ -9,7 +9,18 @@ function parseItems(lines){
   lines.forEach(l=>{try{
     const j=JSON.parse(l);
     if(j.kind==='items' && Array.isArray(j.items)){
-      j.items.forEach(it=>items.push(it.name||it.title||JSON.stringify(it)));
+      j.items.forEach(it=>{
+        const name=it.name||it.title||JSON.stringify(it);
+        if(!items.includes(name)) items.push(name);
+      });
+    }
+    if(j.kind==='ws_event'&&j.event==='product_added'){
+      const name=j.payload?.product?.name;
+      if(name && !items.includes(name)) items.push(name);
+    }
+    if(j.kind==='ws_event'&&j.event==='product_updated'){
+      const name=j.payload?.product?.name;
+      if(name && !items.includes(name)) items.push(name);
     }
   }catch(e){}});
   return items;
@@ -40,9 +51,26 @@ function parseViewers(lines){
       if (j.kind === 'ws_event' && j.event === 'livestream_view_count_updated') {
         count = j.payload?.viewCount || count;
       }
+      if (j.kind==='ws_event' && j.event==='livestream_update'){
+        const v=j.payload?.activeViewers;
+        if(typeof v==='number') count=v;
+      }
     } catch (e) {}
   });
   return count;
+}
+
+function parseInfo(lines){
+  let host='—';
+  let title='—';
+  lines.forEach(l=>{try{
+    const j=JSON.parse(l);
+    if(j.kind==='ws_event' && j.event==='livestream_update'){
+      host = j.payload?.hostUsername || host;
+      title = j.payload?.title || title;
+    }
+  }catch(e){}});
+  return {host,title};
 }
 
 function viewerHistory(lines){
@@ -80,16 +108,30 @@ function parseSales(lines){
       if (j.kind === 'sale' ||
           (j.kind === 'ws_event' && (j.event === 'sold' || j.event === 'payment_succeeded'))) {
         const s = j.sale || j.payload;
-        // also support DOM-scraped sold payloads
         const name  = s?.item?.name
                      || s?.product?.name
                      || '—';
-        const price = parseFloat(s?.price || s?.amount) || 0;
+        const price = parseFloat(s?.price || s?.amount || s?.soldPrice?.amount || s?.product?.soldPriceCents/100) || 0;
         const buyer = s?.buyer?.username
                      || s?.bidder?.username
                      || s?.user?.username
+                     || s?.product?.purchaserUser?.username
                      || '—';
         sales.push({ name, price, buyer });
+      }
+      if(j.kind==='ws_event'&&j.event==='product_updated'){
+        const p=j.payload?.product;
+        if(p&& (p.status==='SOLD'||p.soldPriceCents||p.purchaserUser)){
+          const name=p.name||'—';
+          const price=parseFloat(p.soldPriceCents)/100||0;
+          const buyer=p.purchaserUser?.username||'—';
+          sales.push({name, price, buyer});
+        }
+      }
+      if(j.kind==='ws_event'&&j.event==='randomizer_result_event'){
+        const name=j.payload?.result||'—';
+        const buyer=j.payload?.buyer_username||'—';
+        sales.push({name, price:0, buyer});
       }
     } catch(e){}
   });
@@ -117,15 +159,27 @@ function update(){
   chrome.storage.local.get(['log'], d => {
     const lines = (d.log || '').split('\n').filter(Boolean);
 
-    // Items
+    // Info
+    const {host, title} = parseInfo(lines);
+    document.getElementById('hostName').textContent = host;
+    document.getElementById('streamTitle').textContent = title;
+
+    // Items and counts
     const items = parseItems(lines);
+    const sales = parseSales(lines);
+    const counts = {};
+    items.forEach(i => { counts[i] = 0; });
+    sales.forEach(s => { if(counts[s.name]!==undefined) counts[s.name]++; });
     document.getElementById('tblItems').innerHTML =
       items.length
-        ? items.map(i => `<tr><td>${i}</td></tr>`).join('')
-        : '<tr><td>No items yet…</td></tr>';
+        ? items.map(i => `<tr><td>${i}</td><td>${counts[i]||0}</td></tr>`).join('')
+        : '<tr><td colspan="2">No items yet…</td></tr>';
+
+    const remaining = items.length - sales.length;
+    document.getElementById('remaining').textContent =
+      `Items Remaining: ${remaining}`;
 
     // Sales + Average
-    const sales = parseSales(lines);
     document.getElementById('tblSales').innerHTML =
       sales.length
         ? sales.map(s =>
@@ -147,8 +201,7 @@ function update(){
 
     // Viewers
     const viewers = parseViewers(lines);
-    document.getElementById('tblViewers').innerHTML =
-      `<tr><td>${viewers}</td></tr>`;
+    document.getElementById('viewerCount').textContent = viewers;
 
     // Debug only shows event summary
     const dbg = lines.slice(-200).reverse().map(l => {

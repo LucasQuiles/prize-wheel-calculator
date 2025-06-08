@@ -13,6 +13,15 @@ pre{font-size:11px;white-space:pre-wrap}
 <body>
 <h3>Whatnot Sniffer</h3>
 
+<h4>Info</h4>
+<table>
+  <tbody id="tblInfo">
+    <tr><td>Host</td><td id="hostName">—</td></tr>
+    <tr><td>Title</td><td id="streamTitle">—</td></tr>
+    <tr><td>Viewers</td><td id="viewerCount">0</td></tr>
+  </tbody>
+</table>
+
 <!-- URL entry & Start -->
 <input id="auctionUrl" type="text" placeholder="Auction URL (leave blank to track current tab)" />
 <button id="startBtn">Start / Track</button>
@@ -23,9 +32,12 @@ pre{font-size:11px;white-space:pre-wrap}
 
 <!-- Live lists -->
 <h4>Items</h4>
-<table><tbody id="tblItems">
-  <tr><td>No items yet…</td></tr>
-</tbody></table>
+<table>
+  <thead><tr><th>Item</th><th>Hits</th></tr></thead>
+  <tbody id="tblItems">
+    <tr><td colspan="2">No items yet…</td></tr>
+  </tbody>
+</table>
 
 <!-- Sales -->
 <h4>Sales</h4>
@@ -38,6 +50,9 @@ pre{font-size:11px;white-space:pre-wrap}
 <div id="avgPrice" style="margin:4px 0;font-size:12px;">
   Average Sale Price: $0.00
 </div>
+<div id="remaining" style="margin:4px 0;font-size:12px;">
+  Items Remaining: 0
+</div>
 
 <!-- Bids -->
 <h4>Bids</h4>
@@ -45,11 +60,6 @@ pre{font-size:11px;white-space:pre-wrap}
   <tr><td>No bids yet…</td></tr>
 </tbody></table>
 
-<!-- Viewers -->
-<h4>Viewers</h4>
-<table><tbody id="tblViewers">
-  <tr><td>No viewer data…</td></tr>
-</tbody></table>
 
 <!-- Debug feed -->
 <details>

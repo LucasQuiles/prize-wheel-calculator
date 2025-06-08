@@ -208,9 +208,16 @@ document.getElementById('startBtn').addEventListener('click',()=>{
 
 PANEL_HTML = """<!DOCTYPE html>
 <html><head><meta charset='utf-8'>
-<style>body{font:13px sans-serif;width:320px;padding:8px}#items,#sales{margin-bottom:8px}pre{font-size:11px;white-space:pre-wrap}</style>
+<style>body{font:13px sans-serif;width:320px;padding:8px}#items,#sales{margin-bottom:8px}pre{font-size:11px;white-space:pre-wrap}table{width:100%;border-collapse:collapse;margin-bottom:8px}td{border-bottom:1px solid #ddd;padding:2px 4px}</style>
 </head><body>
 <h3>Whatnot Sniffer</h3>
+
+<h4>Info</h4>
+<table id='info'><tbody>
+<tr><td>Host</td><td id='hostName'>—</td></tr>
+<tr><td>Title</td><td id='streamTitle'>—</td></tr>
+<tr><td>Viewers</td><td id='viewerCount'>0</td></tr>
+</tbody></table>
 
 <input id='auctionUrl' type='text' placeholder='Auction URL (leave blank to track current tab)'>
 <button id='startBtn'>Start / Track</button>
@@ -219,9 +226,12 @@ PANEL_HTML = """<!DOCTYPE html>
 <pre id='summary'></pre>
 
 <h4>Items</h4>
-<div id='items'>No items yet…</div>
+<table><thead><tr><th>Item</th><th>Hits</th></tr></thead>
+<tbody id='items'><tr><td colspan="2">No items yet…</td></tr></tbody></table>
 <h4>Sales</h4>
 <div id='sales'>No sales yet…</div>
+<div id='avgPrice'>Average Sale Price: $0.00</div>
+<div id='remaining'>Items Remaining: 0</div>
 
 <button id='saveBtn'>Save log as JSON</button>
 <pre id='log'></pre>
@@ -232,12 +242,22 @@ PANEL_HTML = """<!DOCTYPE html>
 PANEL_JS = """
 function parseItems(lines){
   const items=[];
-  lines.forEach(l=>{try{const j=JSON.parse(l);if(j.kind==='items'&&Array.isArray(j.items)){j.items.forEach(it=>{items.push(it.name||it.title||JSON.stringify(it));});}}catch{}});
+  lines.forEach(l=>{try{const j=JSON.parse(l);if(j.kind==='items'&&Array.isArray(j.items)){j.items.forEach(it=>{const n=it.name||it.title||JSON.stringify(it);if(!items.includes(n))items.push(n);});}if(j.kind==='ws_event'&&j.event==='product_added'){const n=j.payload?.product?.name;if(n&&!items.includes(n))items.push(n);}if(j.kind==='ws_event'&&j.event==='product_updated'){const n=j.payload?.product?.name;if(n&&!items.includes(n))items.push(n);}}catch{}});
   return items;
+}
+function parseViewers(lines){
+  let c=0;
+  lines.forEach(l=>{try{const j=JSON.parse(l);if(j.kind==='ws_event'&&j.event==='livestream_view_count_updated'){c=j.payload?.viewCount||c;}if(j.kind==='ws_event'&&j.event==='livestream_update'){const v=j.payload?.activeViewers;if(typeof v==='number')c=v;}}catch{}});
+  return c;
+}
+function parseInfo(lines){
+  let host='—',title='—';
+  lines.forEach(l=>{try{const j=JSON.parse(l);if(j.kind==='ws_event'&&j.event==='livestream_update'){host=j.payload?.hostUsername||host;title=j.payload?.title||title;}}catch{}});
+  return {host,title};
 }
 function parseSales(lines){
   const sales=[];
-  lines.forEach(l=>{try{const j=JSON.parse(l);if(j.kind==='sale'){const s=j.sale;const name=s?.item?.name||s?.item?.title||'';sales.push(name||JSON.stringify(s));}}catch{}});
+  lines.forEach(l=>{try{const j=JSON.parse(l);if(j.kind==='sale'||(j.kind==='ws_event'&&(j.event==='sold'||j.event==='payment_succeeded'))){const s=j.sale||j.payload;const name=s?.item?.name||s?.product?.name||'—';const price=parseFloat(s?.price||s?.amount||s?.soldPrice?.amount||s?.product?.soldPriceCents/100)||0;const buyer=s?.buyer?.username||s?.bidder?.username||s?.user?.username||s?.product?.purchaserUser?.username||'—';sales.push({name,price,buyer});}if(j.kind==='ws_event'&&j.event==='product_updated'){const p=j.payload?.product;if(p&&(p.status==='SOLD'||p.soldPriceCents||p.purchaserUser)){const name=p.name||'—';const price=parseFloat(p.soldPriceCents)/100||0;const buyer=p.purchaserUser?.username||'—';sales.push({name,price,buyer});}}if(j.kind==='ws_event'&&j.event==='randomizer_result_event'){const name=j.payload?.result||'—';const buyer=j.payload?.buyer_username||'—';sales.push({name,price:0,buyer});}}catch{}});
   return sales;
 }
 function summarise(items, sales){
@@ -255,10 +275,19 @@ function update(){
     const log=d.log||'';
     const lines=log.split('\n').filter(Boolean);
     document.getElementById('log').textContent=log||'No data yet…';
+    const info=parseInfo(lines);
+    document.getElementById('hostName').textContent=info.host;
+    document.getElementById('streamTitle').textContent=info.title;
+    const viewers=parseViewers(lines);
+    document.getElementById('viewerCount').textContent=viewers;
     const items=parseItems(lines);
-    document.getElementById('items').innerHTML=items.length?items.map(i=>`<div>${i}</div>`).join(''):'No items yet…';
     const sales=parseSales(lines);
-    document.getElementById('sales').innerHTML=sales.length?sales.map(s=>`<div>${s}</div>`).join(''):'No sales yet…';
+    const counts={};items.forEach(i=>counts[i]=0);sales.forEach(s=>{if(counts[s.name]!==undefined)counts[s.name]++;});
+    document.getElementById('items').innerHTML=items.length?items.map(i=>`<tr><td>${i}</td><td>${counts[i]}</td></tr>`).join(''):'<tr><td colspan="2">No items yet…</td></tr>';
+    document.getElementById('sales').innerHTML=sales.length?sales.map(s=>`<div>${s.name} - ${s.buyer} - $${s.price.toFixed(2)}</div>`).join(''):'No sales yet…';
+    const avg=sales.length?(sales.reduce((a,b)=>a+b.price,0)/sales.length).toFixed(2):'0.00';
+    document.getElementById('avgPrice').textContent='Average Sale Price: $'+avg;
+    document.getElementById('remaining').textContent='Items Remaining: '+(items.length-sales.length);
     document.getElementById('summary').textContent=summarise(items,sales);
   });
 }
