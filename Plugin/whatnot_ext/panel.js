@@ -127,64 +127,53 @@ function downloadLog(logStr){
 
 /* ---------- main update loop ---------- */
 function update(){
-  chrome.storage.local.get(['log'], d=>{
-    const log = d.log || '';
-    const lines = log.split('\n').filter(Boolean);
+  chrome.storage.local.get(['log'], d => {
+    const lines = (d.log || '').split('\n').filter(Boolean);
 
-    // hide raw JSON—handled via debug feed
-    document.getElementById('log').textContent = '';
-
-    // items table
+    // Items
     const items = parseItems(lines);
-    document.getElementById('tblItems').innerHTML = items.length ?
-      items.map(i=>`<tr><td>${i}</td></tr>`).join('') :
-      '<tr><td>No items yet…</td></tr>';
+    document.getElementById('tblItems').innerHTML =
+      items.length
+        ? items.map(i => `<tr><td>${i}</td></tr>`).join('')
+        : '<tr><td>No items yet…</td></tr>';
 
-    // sales table
+    // Sales + Average
     const sales = parseSales(lines);
-    document.getElementById('tblSales').innerHTML = sales.length
-      ? sales.map(s =>
-          `<tr>
-             <td>${s.name}</td>
-             <td>${s.buyer}</td>
-             <td>$${s.price.toFixed(2)}</td>
-           </tr>`
-        ).join('')
-      : '<tr><td colspan="3">No sales yet…</td></tr>';
-
-    // update average price
+    document.getElementById('tblSales').innerHTML =
+      sales.length
+        ? sales.map(s =>
+            `<tr><td>${s.name}</td><td>${s.buyer}</td><td>$${s.price.toFixed(2)}</td></tr>`
+          ).join('')
+        : '<tr><td colspan="3">No sales yet…</td></tr>';
     const avg = sales.length
       ? (sales.reduce((sum, s) => sum + s.price, 0) / sales.length).toFixed(2)
       : '0.00';
-    document.getElementById('avgPrice').textContent = `Average Sale Price: $${avg}`;
+    document.getElementById('avgPrice').textContent =
+      `Average Sale Price: $${avg}`;
 
-    // derived stats
+    // Bids
     const bids = parseBids(lines);
+    document.getElementById('tblBids').innerHTML =
+      bids.length
+        ? bids.map(b => `<tr><td>$${b.toFixed(2)}</td></tr>`).join('')
+        : '<tr><td>No bids yet…</td></tr>';
+
+    // Viewers
     const viewers = parseViewers(lines);
-    const viewerHist = viewerHistory(lines);
-    const revenue = totalRevenue(lines);
+    document.getElementById('tblViewers').innerHTML =
+      `<tr><td>${viewers}</td></tr>`;
 
-    // bids table
-    document.getElementById('tblBids').innerHTML = bids.length ?
-      bids.map(b=>`<tr><td>${b}</td></tr>`).join('') :
-      '<tr><td>No bids yet…</td></tr>';
-
-    // viewers table
-    document.getElementById('tblViewers').innerHTML = viewerHist.length ?
-      viewerHist.map(v=>`<tr><td>${v}</td></tr>`).join('') :
-      '<tr><td>No viewer data…</td></tr>';
-
-    // debug feed (newest first)
-    const dbg = lines.slice(-200).reverse().map(l=>{
-      try{
-        const j=JSON.parse(l);
-        return `[${j.kind}] ${j.event||j.topic||j.url||''}`;
-      }catch(e){return l;}
+    // Debug only shows event summary
+    const dbg = lines.slice(-40).reverse().map(l => {
+      try { const j = JSON.parse(l); return `[${j.kind}] ${j.event || j.topic || j.url || ''}`; }
+      catch { return l; }
     }).join('\n');
     document.getElementById('debug').textContent = dbg;
 
-    // summary line
-    document.getElementById('summaryText').textContent = summarise(items,sales,bids,viewers,revenue);
+    // Summary bar (optional)
+    document.getElementById('summary').textContent =
+      summarise(items, sales, bids, viewers,
+                totalRevenue(lines));
   });
 }
 
