@@ -14,7 +14,7 @@
   };
 
   /* ---------- inject ws_tap.js for WebSocket tapping ---------- */
-  // No inline injection: rely on ws_tap.js from background.js
+  // ws_tap.js is injected by background.js using chrome.scripting
 
   /* ---------- Relay page → extension ---------- */
   window.addEventListener('message', (e) => {
@@ -92,6 +92,9 @@
   } else {
     scrape();
   }
-  const mo = new MutationObserver(scrape);
-  mo.observe(document.documentElement, { childList: true, subtree: true });
+  new MutationObserver(scrape)
+    .observe(document.documentElement, { childList: true, subtree: true });
+
+  // poll every second to catch rapid updates
+  setInterval(scrape, 1000);
 })();

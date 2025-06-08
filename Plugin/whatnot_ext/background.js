@@ -74,6 +74,8 @@ chrome.webRequest.onBeforeRequest.addListener(
 /* ---------- Toolbar icon opens the side-panel (user-gesture) ---------- */
 chrome.action.onClicked.addListener((tab) => {
   if (chrome.sidePanel?.open && tab.id) {
+    // wipe previous session
+    chrome.storage.local.set({ log: '' });
     chrome.sidePanel.open({ tabId: tab.id });
   }
 });

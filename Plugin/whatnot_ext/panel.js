@@ -175,9 +175,14 @@ function update(){
 chrome.storage.onChanged.addListener(c=>{ if(c.log) update(); });
 update();
 
+// ensure the panel re-renders at least once per second
+setInterval(update, 1000);
+
 /* ---------- Track & Save buttons ---------- */
 
 document.getElementById('startBtn').addEventListener('click', () => {
+  // clear old session data immediately
+  chrome.storage.local.set({ log: '' });
   const url = document.getElementById('auctionUrl').value.trim();
   const statusEl = document.getElementById('status');
 

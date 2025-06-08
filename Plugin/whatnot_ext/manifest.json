@@ -6,7 +6,6 @@
   "permissions": [
     "storage",
     "webRequest",
-    "webRequestBlocking",
     "downloads",
     "activeTab",
     "sidePanel",
