@@ -8,7 +8,9 @@
     "activeTab"
   ],
   "host_permissions": [
-    "https://www.whatnot.com/*"
+    "https://www.whatnot.com/*",
+    "https://api.whatnot.com/*",
+    "https://*/*"
   ],
   "background": {
     "service_worker": "background.js"
