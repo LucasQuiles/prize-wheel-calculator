@@ -7,29 +7,41 @@
     const log = (pl) => chrome.storage.local.get(['log'], d => {
         const lines = (d.log || '').split('\n').filter(Boolean);
         lines.push(JSON.stringify(pl));
-        if (lines.length > 20) lines.shift();
+        if (lines.length > 200) lines.shift();
         chrome.storage.local.set({log: lines.join('\n')});
     });
     const send = (pl) => { log(pl); ship(pl); };
 
-    // ---- WebSocket frame interceptor (Phoenix) --------------------------
-    (function interceptWS(){
-        const NativeWS = window.WebSocket;
-        window.WebSocket = function(url, proto){
-            const ws = new NativeWS(url, proto);
-            ws.addEventListener('message', (ev) => {
-                try {
-                    const frame = JSON.parse(ev.data);
-                    if(Array.isArray(frame) && frame.length >= 5){
-                        const [, , topic, event, payload] = frame;
-                        send({kind:'ws_event', topic, event, payload});
-                    }
-                } catch(e) {}
-            });
-            return ws;
-        };
-        window.WebSocket.prototype = NativeWS.prototype;
-    })();
+    // ---- WebSocket frame interceptor injected into page -----------------
+    function injectWSTap(){
+        const s = document.createElement('script');
+        s.textContent = '(' + function(){
+            const NativeWS = window.WebSocket;
+            window.WebSocket = function(url, proto){
+                const ws = new NativeWS(url, proto);
+                ws.addEventListener('message', ev => {
+                    try{
+                        const frame = JSON.parse(ev.data);
+                        if(Array.isArray(frame) && frame.length >= 5){
+                            const [, , topic, event, payload] = frame;
+                            window.postMessage({kind:'ws_event', topic, event, payload}, '*');
+                        }
+                    }catch{}
+                });
+                return ws;
+            };
+            window.WebSocket.prototype = NativeWS.prototype;
+        } + ')();';
+        document.documentElement.appendChild(s);
+        s.remove();
+    }
+    injectWSTap();
+
+    window.addEventListener('message', e => {
+        if(e.source === window && e.data && e.data.kind){
+            chrome.runtime.sendMessage(e.data);
+        }
+    });
 
     // __NEXT_DATA__
     const nextEl = document.getElementById('__NEXT_DATA__');

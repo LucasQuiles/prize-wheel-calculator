@@ -6,6 +6,24 @@ function parseItems(lines){
   return items;
 }
 
+function parseBids(lines){
+  const bids=[];
+  lines.forEach(l=>{try{const j=JSON.parse(l);if(j.kind==='ws_event'&&j.event==='bid'){const a=parseFloat(j.payload?.amount||j.payload?.bid_amount);if(!isNaN(a))bids.push(a);}}catch{}});
+  return bids;
+}
+
+function parseViewers(lines){
+  let count=0;
+  lines.forEach(l=>{try{const j=JSON.parse(l);if(j.kind==='api'&&j.url.includes('/viewers')){count=j.json?.viewer_count||j.json?.count||count;}}catch{}});
+  return count;
+}
+
+function totalRevenue(lines){
+  let sum=0;
+  lines.forEach(l=>{try{const j=JSON.parse(l);if(j.kind==='sale'){const p=parseFloat(j.sale?.price||j.sale?.amount);if(!isNaN(p))sum+=p;}else if(j.kind==='ws_event'&&j.event==='sold'){const p=parseFloat(j.payload?.price||j.payload?.amount);if(!isNaN(p))sum+=p;}}catch{}});
+  return sum;
+}
+
 function parseSales(lines){
   const sales=[];
   lines.forEach(l=>{
@@ -24,9 +42,10 @@ function parseSales(lines){
   return sales;
 }
 
-function summarise(items, sales){
+function summarise(items, sales, bids, viewers, revenue){
   const pct = items.length ? ((sales.length/items.length)*100).toFixed(1)+'%' : '—';
-  return `\nItems found : ${items.length}\nSold items  : ${sales.length}\nSell-through: ${pct}\nLast update : ${new Date().toLocaleTimeString()}`.trim();
+  const maxBid = bids.length ? Math.max(...bids) : 0;
+  return `\nItems: ${items.length}  Sales: ${sales.length}  Viewers: ${viewers}\nHighest bid: ${maxBid}  Revenue: $${revenue.toFixed(2)}\nSell-through: ${pct}\nLast update: ${new Date().toLocaleTimeString()}`.trim();
 }
 
 function downloadLog(logStr){
@@ -46,9 +65,21 @@ function update(){
 
     // computed lists
     const items = parseItems(lines);
-    document.getElementById('items').innerHTML = items.length ? items.map(i=>`<div>${i}</div>`).join('') : 'No items yet…';
+    document.getElementById('tblItems').innerHTML = items.length ? items.map(i=>`<tr><td>${i}</td></tr>`).join('') : '<tr><td>No items yet…</td></tr>';
     const sales = parseSales(lines);
-    document.getElementById('sales').innerHTML = sales.length ? sales.map(s=>`<div>${s}</div>`).join('') : 'No sales yet…';
+    document.getElementById('tblSales').innerHTML = sales.length ? sales.map(s=>`<tr><td>${s}</td></tr>`).join('') : '<tr><td>No sales yet…</td></tr>';
+    const bids = parseBids(lines);
+    const viewers = parseViewers(lines);
+    const revenue = totalRevenue(lines);
+
+    // live debug feed (newest first)
+    const dbg = lines.slice(-200).reverse().map(l=>{
+      try{
+        const j=JSON.parse(l);
+        return `[${j.kind}] ${j.event||j.topic||j.url||''}`;
+      }catch{return l;}
+    }).join('\n');
+    document.getElementById('debug').textContent = dbg;
 
     // live debug feed (newest first)
     const dbg = lines.slice(-20).reverse().map(l=>{
@@ -60,7 +91,7 @@ function update(){
     document.getElementById('debug').textContent = dbg;
 
     // summary
-    document.getElementById('summary').textContent = summarise(items, sales);
+    document.getElementById('summary').textContent = summarise(items, sales, bids, viewers, revenue);
   });
 }
 

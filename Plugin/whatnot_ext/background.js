@@ -5,15 +5,15 @@ const ship = (pl) => fetch('http://localhost:5001/ingest', {
 const log = (pl) => chrome.storage.local.get(['log'], d => {
   const lines = (d.log || '').split('\n').filter(Boolean);
   lines.push(JSON.stringify(pl));
-  if (lines.length > 20) lines.shift();
+  if (lines.length > 200) lines.shift();
   chrome.storage.local.set({log: lines.join('\n')});
 });
 const send = (pl) => { log(pl); ship(pl); };
 
 chrome.webRequest.onCompleted.addListener(
   (d) => {
-    if (/\/v1\/lives\/|\/items|\/products|\/purchases/.test(d.url)) {
-      fetch(d.url)
+    if (/\/v1\/lives\/|\/items|\/products|\/purchases|\/bids|\/viewers/.test(d.url)) {
+      fetch(d.url, {credentials:'include'})
         .then(r => r.json())
         .then(j => {
           send({kind:'api', url:d.url, json:j});
@@ -51,4 +51,9 @@ chrome.tabs.onActivated.addListener((info) => {
       chrome.sidePanel.open({ tabId: info.tabId });
     }
   });
+});
+
+// messages from content script
+chrome.runtime.onMessage.addListener((pl) => {
+  if (pl && pl.kind) send(pl);
 });
