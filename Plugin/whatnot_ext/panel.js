@@ -32,12 +32,30 @@ function parseBids(lines){
     try {
       const j = JSON.parse(l);
       if (j.kind === 'ws_event' && (j.event === 'bid' || j.event === 'new_bid')) {
-        const a = parseFloat(j.payload?.amount || j.payload?.bid_amount);
-        if (!isNaN(a)) bids.push(a);
+        const amt = parseFloat(j.payload?.amount || j.payload?.bid_amount);
+        if (!isNaN(amt)) {
+          bids.push({ amount: amt, bidder: j.payload?.highestBidder?.username || '—' });
+        }
       }
     } catch (e) {}
   });
   return bids;
+}
+
+function parseBreakCounts(lines){
+  const map = {};
+  lines.forEach(l => {
+    try {
+      const j = JSON.parse(l);
+      if (j.kind === 'ws_event' && j.event === 'break_updated') {
+        const t = j.payload?.title;
+        const sold = parseInt(j.payload?.filled_break_spots);
+        const tot = parseInt(j.payload?.total_break_spots);
+        if (t) map[t] = { sold: isNaN(sold) ? 0 : sold, total: isNaN(tot) ? 0 : tot };
+      }
+    } catch (e) {}
+  });
+  return map;
 }
 
 function parseViewers(lines){
@@ -140,7 +158,7 @@ function parseSales(lines){
 
 function summarise(items,sales,bids,viewers,revenue){
   const pct = items.length ? ((sales.length/items.length)*100).toFixed(1)+'%' : '—';
-  const maxBid = bids.length ? Math.max(...bids) : 0;
+  const maxBid = bids.length ? Math.max(...bids.map(b=>b.amount)) : 0;
   return `Items: ${items.length}  Sales: ${sales.length}  Viewers: ${viewers}\n`+
          `Highest bid: ${maxBid}  Revenue: $${revenue.toFixed(2)}\n`+
          `Sell-through: ${pct}\n`+
@@ -164,18 +182,27 @@ function update(){
     document.getElementById('hostName').textContent = host;
     document.getElementById('streamTitle').textContent = title;
 
-    // Items and counts
+    // Items, break counts and remaining totals
     const items = parseItems(lines);
     const sales = parseSales(lines);
+    const breakMap = parseBreakCounts(lines);
+
+    Object.keys(breakMap).forEach(t => { if(!items.includes(t)) items.push(t); });
+
     const counts = {};
-    items.forEach(i => { counts[i] = 0; });
-    sales.forEach(s => { if(counts[s.name]!==undefined) counts[s.name]++; });
+    items.forEach(i => {
+      counts[i] = breakMap[i] ? breakMap[i].sold : 0;
+    });
+    sales.forEach(s => { if(counts[s.name] !== undefined) counts[s.name]++; });
+
     document.getElementById('tblItems').innerHTML =
       items.length
-        ? items.map(i => `<tr><td>${i}</td><td>${counts[i]||0}</td></tr>`).join('')
+        ? items.map(i => `<tr><td>${i}</td><td>${counts[i] || 0}</td></tr>`).join('')
         : '<tr><td colspan="2">No items yet…</td></tr>';
 
-    const remaining = items.length - sales.length;
+    const remaining = Object.keys(breakMap).length
+      ? Object.values(breakMap).reduce((sum,v)=>sum+(v.total-v.sold),0)
+      : items.length - sales.length;
     document.getElementById('remaining').textContent =
       `Items Remaining: ${remaining}`;
 
@@ -196,8 +223,8 @@ function update(){
     const bids = parseBids(lines);
     document.getElementById('tblBids').innerHTML =
       bids.length
-        ? bids.map(b => `<tr><td>$${b.toFixed(2)}</td></tr>`).join('')
-        : '<tr><td>No bids yet…</td></tr>';
+        ? bids.map(b => `<tr><td>$${b.amount.toFixed(2)}</td><td>${b.bidder}</td></tr>`).join('')
+        : '<tr><td colspan="2">No bids yet…</td></tr>';
 
     // Viewers
     const viewers = parseViewers(lines);

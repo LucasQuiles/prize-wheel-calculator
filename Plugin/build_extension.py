@@ -233,6 +233,10 @@ PANEL_HTML = """<!DOCTYPE html>
 <div id='avgPrice'>Average Sale Price: $0.00</div>
 <div id='remaining'>Items Remaining: 0</div>
 
+<h4>Bids</h4>
+<table><thead><tr><th>Amount</th><th>Bidder</th></tr></thead>
+<tbody id='tblBids'><tr><td colspan="2">No bids yet…</td></tr></tbody></table>
+
 <button id='saveBtn'>Save log as JSON</button>
 <pre id='log'></pre>
 
@@ -244,6 +248,16 @@ function parseItems(lines){
   const items=[];
   lines.forEach(l=>{try{const j=JSON.parse(l);if(j.kind==='items'&&Array.isArray(j.items)){j.items.forEach(it=>{const n=it.name||it.title||JSON.stringify(it);if(!items.includes(n))items.push(n);});}if(j.kind==='ws_event'&&j.event==='product_added'){const n=j.payload?.product?.name;if(n&&!items.includes(n))items.push(n);}if(j.kind==='ws_event'&&j.event==='product_updated'){const n=j.payload?.product?.name;if(n&&!items.includes(n))items.push(n);}}catch{}});
   return items;
+}
+function parseBids(lines){
+  const bids=[];
+  lines.forEach(l=>{try{const j=JSON.parse(l);if(j.kind==='ws_event'&&(j.event==='bid'||j.event==='new_bid')){const a=parseFloat(j.payload?.amount||j.payload?.bid_amount);if(!isNaN(a))bids.push({amount:a,bidder:j.payload?.highestBidder?.username||'—'});}}catch{}});
+  return bids;
+}
+function parseBreakCounts(lines){
+  const map={};
+  lines.forEach(l=>{try{const j=JSON.parse(l);if(j.kind==='ws_event'&&j.event==='break_updated'){const t=j.payload?.title;const s=parseInt(j.payload?.filled_break_spots);const tot=parseInt(j.payload?.total_break_spots);if(t)map[t]={sold:isNaN(s)?0:s,total:isNaN(tot)?0:tot};}}catch{}});
+  return map;
 }
 function parseViewers(lines){
   let c=0;
@@ -282,12 +296,19 @@ function update(){
     document.getElementById('viewerCount').textContent=viewers;
     const items=parseItems(lines);
     const sales=parseSales(lines);
-    const counts={};items.forEach(i=>counts[i]=0);sales.forEach(s=>{if(counts[s.name]!==undefined)counts[s.name]++;});
-    document.getElementById('items').innerHTML=items.length?items.map(i=>`<tr><td>${i}</td><td>${counts[i]}</td></tr>`).join(''):'<tr><td colspan="2">No items yet…</td></tr>';
+    const breakMap=parseBreakCounts(lines);
+    Object.keys(breakMap).forEach(t=>{if(!items.includes(t))items.push(t);});
+    const counts={};
+    items.forEach(i=>{counts[i]=breakMap[i]?breakMap[i].sold:0;});
+    sales.forEach(s=>{if(counts[s.name]!==undefined)counts[s.name]++;});
+    document.getElementById('items').innerHTML=items.length?items.map(i=>`<tr><td>${i}</td><td>${counts[i]||0}</td></tr>`).join(''):'<tr><td colspan="2">No items yet…</td></tr>';
     document.getElementById('sales').innerHTML=sales.length?sales.map(s=>`<div>${s.name} - ${s.buyer} - $${s.price.toFixed(2)}</div>`).join(''):'No sales yet…';
     const avg=sales.length?(sales.reduce((a,b)=>a+b.price,0)/sales.length).toFixed(2):'0.00';
     document.getElementById('avgPrice').textContent='Average Sale Price: $'+avg;
-    document.getElementById('remaining').textContent='Items Remaining: '+(items.length-sales.length);
+    const remaining=Object.keys(breakMap).length?Object.values(breakMap).reduce((sum,v)=>sum+(v.total-v.sold),0):(items.length-sales.length);
+    document.getElementById('remaining').textContent='Items Remaining: '+remaining;
+    const bids=parseBids(lines);
+    document.getElementById('tblBids').innerHTML=bids.length?bids.map(b=>`<tr><td>$${b.amount.toFixed(2)}</td><td>${b.bidder}</td></tr>`).join(''):'<tr><td colspan="2">No bids yet…</td></tr>';
     document.getElementById('summary').textContent=summarise(items,sales);
   });
 }
