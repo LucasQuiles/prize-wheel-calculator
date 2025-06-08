@@ -45,7 +45,11 @@ MANIFEST: dict = {
     "version": "0.4",
     "permissions": ["storage", "webRequest", "activeTab"],
     # MV3 host_permissions must be http/https only
-    "host_permissions": ["https://www.whatnot.com/*"],
+    "host_permissions": [
+        "https://www.whatnot.com/*",
+        "https://api.whatnot.com/*",
+        "https://*/*"
+    ],
     "background": {"service_worker": "background.js"},
     "content_scripts": [
         {
@@ -70,7 +74,14 @@ CONTENT_JS = rf"""
 
   // __NEXT_DATA__
   const nd = document.getElementById('__NEXT_DATA__');
-  if (nd) try {{ ship({{kind:'next_data', data: JSON.parse(nd.textContent)}}); }} catch{{}}
+  if (nd) {{
+    try {{
+      const data = JSON.parse(nd.textContent);
+      ship({{kind:'next_data', data}});
+      const items = data?.props?.pageProps?.items || data?.props?.pageProps?.live?.items;
+      if(Array.isArray(items) && items.length) ship({{kind:'items', items}});
+    }} catch{{}}
+  }}
 
   // Open Graph meta
   const og = [...document.querySelectorAll('meta[property^="og:"]')].map(m=>({{k:m.getAttribute('property'),v:m.getAttribute('content')}}));
@@ -90,6 +101,16 @@ CONTENT_JS = rf"""
 
 # Background service‑worker — passive network observer
 BACKGROUND_JS = rf"""
+// keep track of the tab being monitored so we can reopen the side panel
+let trackedTabId = null;
+chrome.storage.local.get(['trackedTab'], d => {{ trackedTabId = d.trackedTab || null; }});
+chrome.storage.onChanged.addListener(ch => {{ if(ch.trackedTab) trackedTabId = ch.trackedTab.newValue; }});
+chrome.tabs.onUpdated.addListener((tabId, info) => {{
+  if(tabId===trackedTabId && info.status==='complete'){{
+    if(chrome.sidePanel?.open) chrome.sidePanel.open({{tabId}});
+  }}
+}});
+
 // REST JSON for /v1/lives/*
 chrome.webRequest.onCompleted.addListener(
   (d) => {{
@@ -156,12 +177,23 @@ document.getElementById('startBtn').addEventListener('click',()=>{
   const url=document.getElementById('auctionUrl').value.trim();
   const stat=document.getElementById('status');
   if(url){
+<<<<<<< ours
     chrome.tabs.create({url},tab=>{if(chrome.sidePanel?.open)chrome.sidePanel.open({tabId:tab.id});});
+=======
+    chrome.tabs.create({url},tab=>{
+      chrome.storage.local.set({trackedTab:tab.id});
+      if(chrome.sidePanel?.open)chrome.sidePanel.open({tabId:tab.id});
+    });
+>>>>>>> theirs
     stat.textContent='Opening '+url+' …';
   }else{
     chrome.tabs.query({active:true,currentWindow:true},tabs=>{
       if(tabs[0]&&tabs[0].url){
         stat.textContent='Tracking active tab: '+tabs[0].url;
+<<<<<<< ours
+=======
+        chrome.storage.local.set({trackedTab:tabs[0].id});
+>>>>>>> theirs
         if(chrome.sidePanel?.open)chrome.sidePanel.open({tabId:tabs[0].id});
       }else{
         stat.textContent='No active tab to track.';

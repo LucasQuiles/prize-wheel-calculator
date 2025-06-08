@@ -11,6 +11,23 @@ const log = (pl) => chrome.storage.local.get(['log'], d => {
 });
 const send = (pl) => { log(pl); ship(pl); };
 
+<<<<<<< ours
+=======
+// track which tab we're monitoring so the side panel can persist
+let trackedTabId = null;
+chrome.storage.local.get(['trackedTab'], d => { trackedTabId = d.trackedTab || null; });
+chrome.storage.onChanged.addListener(ch => {
+  if (ch.trackedTab) trackedTabId = ch.trackedTab.newValue;
+});
+
+// reopen the side panel whenever the tracked tab completes loading
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (tabId === trackedTabId && changeInfo.status === 'complete') {
+    if (chrome.sidePanel?.open) chrome.sidePanel.open({ tabId });
+  }
+});
+
+>>>>>>> theirs
 chrome.runtime.onInstalled.addListener(() => {
   if (chrome.sidePanel?.setPanelBehavior) {
     chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
