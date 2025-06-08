@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Whatnot Live Sniffer",
+  "version": "0.2",
+  "permissions": [
+    "storage",
+    "webRequest",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://www.whatnot.com/*",
+    "wss://www.whatnot.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.whatnot.com/live/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Whatnot Sniffer"
+  }
+}
