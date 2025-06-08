@@ -6,7 +6,8 @@
     "storage",
     "webRequest",
     "activeTab",
-    "downloads"
+    "downloads",
+    "sidePanel"
   ],
   "host_permissions": [
     "https://www.whatnot.com/*",
@@ -28,10 +29,10 @@
     }
   ],
   "action": {
-    "default_popup": "popup.html",
     "default_title": "Whatnot Sniffer"
   },
   "side_panel": {
-    "default_path": "panel.html"
+    "default_path": "panel.html",
+    "openPanelOnActionClick": true
   }
 }

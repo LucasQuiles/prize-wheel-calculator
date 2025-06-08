@@ -35,3 +35,17 @@ chrome.webRequest.onBeforeRequest.addListener(
   },
   { urls: ['<all_urls>'], types: ['websocket'] }
 );
+
+// reopen side panel on icon click
+chrome.action.onClicked.addListener((tab) => {
+  if (chrome.sidePanel?.open && tab.id) chrome.sidePanel.open({ tabId: tab.id });
+});
+
+// show panel again when returning to tracked tab
+chrome.tabs.onActivated.addListener((info) => {
+  chrome.storage.local.get(['trackedTab'], (d) => {
+    if (info.tabId === d.trackedTab && chrome.sidePanel?.open) {
+      chrome.sidePanel.open({ tabId: info.tabId });
+    }
+  });
+});
