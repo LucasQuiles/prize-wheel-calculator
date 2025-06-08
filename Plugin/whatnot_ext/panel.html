@@ -25,7 +25,13 @@ pre{font-size:11px;white-space:pre-wrap}
 <h4>Items</h4>
 <table id="tblItems"><tr><td>No items yet…</td></tr></table>
 <h4>Sales</h4>
-<table id="tblSales"><tr><td>No sales yet…</td></tr></table>
+<table>
+  <thead><tr><th>Item</th><th>Buyer</th><th>Price</th></tr></thead>
+  <tbody id="tblSales"><tr><td colspan="3">No sales yet…</td></tr></tbody>
+</table>
+
+<!-- Average sale price -->
+<div id="avgPrice" style="margin-bottom:8px;font-size:12px;">Average Sale Price: $0.00</div>
 <h4>Bids</h4>
 <table id="tblBids"><tr><td>No bids yet…</td></tr></table>
 <h4>Viewers</h4>

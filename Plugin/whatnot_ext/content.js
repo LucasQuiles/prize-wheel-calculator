@@ -75,7 +75,11 @@
         if (!el.dataset.sniffed) {
           el.dataset.sniffed = '1';
           // Emit as ws_event so panel.parseBids sees it
-          send({ kind: 'ws_event', event: 'bid', payload: { amount: el.textContent.trim() } });
+          send({
+            kind: 'ws_event',
+            event: 'new_bid',
+            payload: { amount: el.textContent.trim() }
+          });
         }
       });
     } catch (err) {

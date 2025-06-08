@@ -16,25 +16,32 @@ function parseItems(lines){
 }
 
 function parseBids(lines){
-  const bids=[];
-  lines.forEach(l=>{try{
-    const j=JSON.parse(l);
-    if(j.kind==='ws_event' && j.event==='bid'){
-      const a=parseFloat(j.payload?.amount||j.payload?.bid_amount);
-      if(!isNaN(a)) bids.push(a);
-    }
-  }catch(e){}});
+  const bids = [];
+  lines.forEach(l => {
+    try {
+      const j = JSON.parse(l);
+      if (j.kind === 'ws_event' && (j.event === 'bid' || j.event === 'new_bid')) {
+        const a = parseFloat(j.payload?.amount || j.payload?.bid_amount);
+        if (!isNaN(a)) bids.push(a);
+      }
+    } catch (e) {}
+  });
   return bids;
 }
 
 function parseViewers(lines){
-  let count=0;
-  lines.forEach(l=>{try{
-    const j=JSON.parse(l);
-    if(j.kind==='api' && j.url?.includes('/viewers')){
-      count=j.json?.viewer_count||j.json?.count||count;
-    }
-  }catch(e){}});
+  let count = 0;
+  lines.forEach(l => {
+    try {
+      const j = JSON.parse(l);
+      if (j.kind === 'api' && j.url?.includes('/viewers')) {
+        count = j.json?.viewer_count || j.json?.count || count;
+      }
+      if (j.kind === 'ws_event' && j.event === 'livestream_view_count_updated') {
+        count = j.payload?.viewCount || count;
+      }
+    } catch (e) {}
+  });
   return count;
 }
 
@@ -66,18 +73,19 @@ function totalRevenue(lines){
 }
 
 function parseSales(lines){
-  const sales=[];
-  lines.forEach(l=>{try{
-    const j=JSON.parse(l);
-    if(j.kind==='sale'){
-      const s=j.sale;
-      const name=s?.item?.name||s?.item?.title||'';
-      sales.push(name||JSON.stringify(s));
-    }else if(j.kind==='ws_event' && j.event==='sold'){
-      const name=j.payload?.item?.name||j.payload?.item?.title||'Sold event';
-      sales.push(name);
-    }
-  }catch(e){}});
+  const sales = [];
+  lines.forEach(l => {
+    try {
+      const j = JSON.parse(l);
+      if (j.kind === 'sale' || (j.kind === 'ws_event' && (j.event === 'sold' || j.event === 'payment_succeeded'))) {
+        const s = j.sale || j.payload;
+        const name = s?.item?.name || s?.item?.title || '';
+        const price = parseFloat(s?.price || s?.amount) || 0;
+        const buyer = s?.buyer?.username || s?.bidder?.username || s?.user?.name || '—';
+        sales.push({ name, price, buyer });
+      }
+    } catch (e) {}
+  });
   return sales;
 }
 
@@ -114,9 +122,21 @@ function update(){
 
     // sales table
     const sales = parseSales(lines);
-    document.getElementById('tblSales').innerHTML = sales.length ?
-      sales.map(s=>`<tr><td>${s}</td></tr>`).join('') :
-      '<tr><td>No sales yet…</td></tr>';
+    document.getElementById('tblSales').innerHTML = sales.length
+      ? sales.map(s =>
+          `<tr>
+             <td>${s.name}</td>
+             <td>${s.buyer}</td>
+             <td>$${s.price.toFixed(2)}</td>
+           </tr>`
+        ).join('')
+      : '<tr><td colspan="3">No sales yet…</td></tr>';
+
+    // update average price
+    const avg = sales.length
+      ? (sales.reduce((sum, s) => sum + s.price, 0) / sales.length).toFixed(2)
+      : '0.00';
+    document.getElementById('avgPrice').textContent = `Average Sale Price: $${avg}`;
 
     // derived stats
     const bids = parseBids(lines);
