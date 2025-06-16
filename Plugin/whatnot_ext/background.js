@@ -90,8 +90,8 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
         world: 'MAIN',
         files: ['ws_tap.js']
       })
+      .then(() => chrome.tabs.sendMessage(tabId, { kind: 'refresh' }))
       .catch(() => { /* ignore */ });
-    chrome.tabs.sendMessage(tabId, { kind: 'refresh' });
   }
 });
 

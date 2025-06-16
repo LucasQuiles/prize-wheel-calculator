@@ -299,7 +299,13 @@ function update(){
         ? Object.entries(breakMap).map(([t,b])=>`<tr><td>${t}</td><td>${b.sold}/${b.total}</td></tr>`).join('')
         : '<tr><td colspan="2">No lots yet…</td></tr>';
 
-    const remaining = Object.values(breakMap).reduce((sum,b)=>sum+(b.total-b.sold), items.length?0:0);
+    let remaining = 0;
+    if(Object.keys(breakMap).length){
+      remaining = Object.values(breakMap)
+        .reduce((sum,b)=>sum + (b.total - b.sold), 0);
+    }else{
+      remaining = items.length - sales.length;
+    }
     document.getElementById('remaining').textContent = `Items Remaining: ${remaining}`;
 
     document.getElementById('tblSales').innerHTML =
