@@ -110,6 +110,10 @@ function viewerHistory(lines){
       const c=j.payload?.viewCount;
       if(typeof c==='number') arr.push(c);
     }
+    if(j.kind==='ws_event' && j.event==='livestream_update'){
+      const c=j.payload?.activeViewers;
+      if(typeof c==='number') arr.push(c);
+    }
   }catch(e){}});
   return arr;
 }
@@ -207,18 +211,36 @@ function totalRevenue(lines){
 
 function parseSales(lines){
   const sales=[];
-  lines.forEach(l=>{try{
-    const j=JSON.parse(l);
-    if(j.kind==='ws_event' && (j.event==='sold' || j.event==='payment_succeeded')){
-      const p=j.payload||{};
-      const name=p.product?.name||p.item?.name||'\u2014';
-      const priceCents=p.product?.soldPriceCents||p.priceCents||p.price||p.amount;
-      const price=parseFloat(priceCents)/100||parseFloat(p.price)||0;
-      const buyer=p.purchaserUser?.username||p.buyer||'\u2014';
-      const ts=parseInt(p.timestamp||p.product?.timestamp);
-      sales.push({ name, price:isNaN(price)?0:price, buyer, timestamp:ts||Date.now() });
-    }
-  }catch{} });
+  lines.forEach(l=>{
+    try{
+      const j = JSON.parse(l);
+
+      // (1) Synthetic sale packets from background.js
+      if(j.kind === 'sale'){
+        const price = parseFloat(j.sale?.price || j.sale?.amount);
+        if(!isNaN(price)){
+          sales.push({
+            name: j.sale?.item?.name || j.sale?.product?.name || '\u2014',
+            price,
+            buyer: j.sale?.buyer ?? j.sale?.purchaserUser?.username ?? '\u2014',
+            timestamp: j.sale?.timestamp ?? Date.now()
+          });
+        }
+      }
+
+      // (2) Native WS events
+      if(j.kind==='ws_event' && (j.event==='sold' || j.event==='payment_succeeded')){
+        const p = j.payload || {};
+        const price = (p.product?.soldPriceCents ?? p.priceCents ?? p.price ?? p.amount)/100;
+        sales.push({
+          name: p.product?.name || p.item?.name || '\u2014',
+          price: isNaN(price)?0:price,
+          buyer: p.purchaserUser?.username || p.buyer || '\u2014',
+          timestamp: p.timestamp || p.product?.timestamp || Date.now()
+        });
+      }
+    }catch{}
+  });
   return sales;
 }
 
@@ -253,6 +275,11 @@ function update(){
     const reactions= parseReactions(lines);
     const giveCnt  = parseGiveaways(lines);
     const spinRes  = parseSpinResults(lines);
+
+    const spinRows = Object.entries(spinRes)
+        .map(([res, n]) => `${res}: ${n}`)
+        .join(' | ');
+    document.getElementById('spinStats').textContent = spinRows || '\u2014';
 
     Object.keys(breakMap).forEach(t=>{
       if (!items.includes(t)) items.push(t);
@@ -305,7 +332,10 @@ function update(){
     }
 
     document.getElementById('giveawayCount').textContent = `Entries: ${giveCnt}`;
-    document.getElementById('reactionGauge').textContent = Object.keys(reactions).map(k=>`${k}: ${reactions[k].toFixed(2)}`).join(' | ');
+    document.getElementById('reactionGauge').innerHTML =
+      Object.entries(reactions)
+            .map(([k,v])=>`<div>${k}: ${(v*100).toFixed(1)}%</div>`) 
+            .join('');
 
     const dbg = lines.slice(-200).reverse().map(l => {
       try { const j = JSON.parse(l); return `[${j.kind}] ${j.event || j.topic || j.url || ''}`; }
