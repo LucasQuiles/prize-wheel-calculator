@@ -64,10 +64,12 @@ function parseBids(lines){
   const bids=[];
   lines.forEach(l=>{try{
     const j=JSON.parse(l);
-    if (j.kind==='ws_event' && j.event==='bid'){
-      const a=parseFloat(j.payload.amount);
+    if(j.kind==='ws_event' && (j.event==='bid' || j.event==='new_bid')){
+      const a=parseFloat(j.payload.amount||j.payload.price||j.payload.nextBidPrice?.amount);
+      const bidder=j.payload.highestBidder?.username||j.payload.bidder||'\u2014';
+      const ts=parseInt(j.payload.timestamp||j.payload.product?.timestamp);
       if(!isNaN(a)){
-        bids.push({ amount:a, bidder:j.payload.bidder||'\u2014' });
+        bids.push({ amount:a, bidder, timestamp:ts||Date.now() });
       }
     }
   }catch{} });
@@ -104,8 +106,88 @@ function viewerHistory(lines){
       const c=j.json?.viewer_count||j.json?.count;
       if(typeof c==='number') arr.push(c);
     }
+    if(j.kind==='ws_event' && j.event==='livestream_view_count_updated'){
+      const c=j.payload?.viewCount;
+      if(typeof c==='number') arr.push(c);
+    }
   }catch(e){}});
   return arr;
+}
+
+function parseReactions(lines){
+  let gauge={};
+  lines.forEach(l=>{try{
+    const j=JSON.parse(l);
+    if(j.kind==='ws_event' && j.event==='reactions'){
+      if(j.payload?.reactionTypeToGauge) gauge=j.payload.reactionTypeToGauge;
+    }
+  }catch{}});
+  return gauge;
+}
+
+function parseGiveaways(lines){
+  let count=0;
+  lines.forEach(l=>{try{
+    const j=JSON.parse(l);
+    if(j.kind==='ws_event' && j.event==='giveaway_entry_count_updated'){
+      const c=parseInt(j.payload?.entryCount);
+      if(!isNaN(c)) count=c;
+    }
+  }catch{}});
+  return count;
+}
+
+function parseSpinResults(lines){
+  const res={};
+  lines.forEach(l=>{try{
+    const j=JSON.parse(l);
+    if(j.kind==='ws_event' && j.event==='randomizer_result_event'){
+      const r=j.payload?.result;
+      if(r) res[r]=(res[r]||0)+1;
+    }
+  }catch{}});
+  return res;
+}
+
+function bidVelocity(bids){
+  if(bids.length<2) return 0;
+  const now=Math.max(...bids.map(b=>b.timestamp||0));
+  const recent=bids.filter(b=>b.timestamp>=now-10000);
+  return recent.length/10;
+}
+
+function avgBid(bids){
+  if(!bids.length) return 0;
+  return bids.reduce((s,b)=>s+b.amount,0)/bids.length;
+}
+
+function rpm(sales){
+  if(sales.length<2) return 0;
+  const first=Math.min(...sales.map(s=>s.timestamp||0));
+  const last=Math.max(...sales.map(s=>s.timestamp||first));
+  const minutes=(last-first)/60000;
+  if(minutes<=0) return 0;
+  const total=sales.reduce((s,c)=>s+c.price,0);
+  return total/minutes;
+}
+
+function drawSparkline(canvas, arr){
+  const ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  if(arr.length<2) return;
+  const max=Math.max(...arr);
+  const min=Math.min(...arr);
+  const scale=v=>{
+    if(max===min) return canvas.height/2;
+    return canvas.height-((v-min)/(max-min))*canvas.height;
+  };
+  ctx.beginPath();
+  ctx.moveTo(0,scale(arr[0]));
+  arr.slice(1).forEach((v,i)=>{
+    ctx.lineTo((i/(arr.length-1))*canvas.width, scale(v));
+  });
+  ctx.strokeStyle='#00f';
+  ctx.stroke();
 }
 
 function totalRevenue(lines){
@@ -127,11 +209,14 @@ function parseSales(lines){
   const sales=[];
   lines.forEach(l=>{try{
     const j=JSON.parse(l);
-    if (j.kind==='ws_event' && j.event==='sold'){
-      const name  = j.payload.item.name || '\u2014';
-      const price = parseFloat(j.payload.price) || 0;
-      const buyer = j.payload.buyer || '\u2014';
-      sales.push({ name, price, buyer });
+    if(j.kind==='ws_event' && (j.event==='sold' || j.event==='payment_succeeded')){
+      const p=j.payload||{};
+      const name=p.product?.name||p.item?.name||'\u2014';
+      const priceCents=p.product?.soldPriceCents||p.priceCents||p.price||p.amount;
+      const price=parseFloat(priceCents)/100||parseFloat(p.price)||0;
+      const buyer=p.purchaserUser?.username||p.buyer||'\u2014';
+      const ts=parseInt(p.timestamp||p.product?.timestamp);
+      sales.push({ name, price:isNaN(price)?0:price, buyer, timestamp:ts||Date.now() });
     }
   }catch{} });
   return sales;
@@ -165,6 +250,9 @@ function update(){
     const items    = parseItems(lines);
     const sales    = parseSales(lines);
     const breakMap = parseBreakCounts(lines);
+    const reactions= parseReactions(lines);
+    const giveCnt  = parseGiveaways(lines);
+    const spinRes  = parseSpinResults(lines);
 
     Object.keys(breakMap).forEach(t=>{
       if (!items.includes(t)) items.push(t);
@@ -178,6 +266,11 @@ function update(){
       items.length
         ? items.map(i=>`<tr><td>${i}</td><td>${counts[i]}</td></tr>`).join('')
         : '<tr><td colspan="2">No items yet…</td></tr>';
+
+    document.getElementById('tblBreaks').innerHTML =
+      Object.keys(breakMap).length
+        ? Object.entries(breakMap).map(([t,b])=>`<tr><td>${t}</td><td>${b.sold}/${b.total}</td></tr>`).join('')
+        : '<tr><td colspan="2">No lots yet…</td></tr>';
 
     const remaining = Object.values(breakMap).reduce((sum,b)=>sum+(b.total-b.sold), items.length?0:0);
     document.getElementById('remaining').textContent = `Items Remaining: ${remaining}`;
@@ -197,8 +290,22 @@ function update(){
         ? bids.map(b=>`<tr><td>$${b.amount.toFixed(2)}</td><td>${b.bidder}</td></tr>`).join('')
         : '<tr><td colspan="2">No bids yet…</td></tr>';
 
+    document.getElementById('bidVelocity').textContent = `Bids/sec: ${bidVelocity(bids).toFixed(2)}`;
+    document.getElementById('avgBid').textContent = `Avg bid: $${avgBid(bids).toFixed(2)}`;
+
+    document.getElementById('rpm').textContent = `RPM: $${rpm(sales).toFixed(2)}`;
+
     const viewers = parseViewers(lines);
     document.getElementById('viewerCount').textContent = viewers;
+
+    const hist = viewerHistory(lines);
+    const canvas = document.getElementById('viewersSparkline');
+    if(canvas && canvas.getContext){
+      drawSparkline(canvas, hist.slice(-50));
+    }
+
+    document.getElementById('giveawayCount').textContent = `Entries: ${giveCnt}`;
+    document.getElementById('reactionGauge').textContent = Object.keys(reactions).map(k=>`${k}: ${reactions[k].toFixed(2)}`).join(' | ');
 
     const dbg = lines.slice(-200).reverse().map(l => {
       try { const j = JSON.parse(l); return `[${j.kind}] ${j.event || j.topic || j.url || ''}`; }

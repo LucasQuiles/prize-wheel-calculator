@@ -109,6 +109,13 @@ export default function PrizeWheelCalculator() {
     }
   }, [wheelItems.length])
 
+  // Average spin cost for current session
+  const avgSpinCost = useMemo(() => {
+    if (spinHistory.length === 0) return 0
+    const total = spinHistory.reduce((sum, spin) => sum + spin.cost, 0)
+    return total / spinHistory.length
+  }, [spinHistory])
+
   // Calculate item statistics with advanced metrics
   const itemStats = useMemo<ItemStats[]>(() => {
     const totalInitialItems = wheelItems.reduce((sum, item) => sum + item.initialCount, 0)
@@ -169,6 +176,9 @@ export default function PrizeWheelCalculator() {
       // Calculate COGS for this item
       const totalCOGS = actualDraws * item.msrp
 
+      // Expected value for next spin based on average cost
+      const expectedValue = (currentProbability / 100) * item.msrp - avgSpinCost
+
       return {
         id: item.id,
         name: item.name,
@@ -193,9 +203,10 @@ export default function PrizeWheelCalculator() {
         recentDraws,
         msrp: item.msrp,
         totalCOGS,
+        expectedValue,
       }
     })
-  }, [wheelItems, spinHistory])
+  }, [wheelItems, spinHistory, avgSpinCost])
 
   // Calculate PNL breakdown
   const pnlBreakdown = useMemo<PNLBreakdown[]>(() => {
@@ -236,6 +247,19 @@ export default function PrizeWheelCalculator() {
 
     const avgRevenuePerItem = itemsDrawn > 0 ? totalRevenue / itemsDrawn : 0
     const avgCOGSPerItem = itemsDrawn > 0 ? totalCOGS / itemsDrawn : 0
+
+    // Expected value of next spin using current probabilities
+    const expectedReturn =
+      itemStats.reduce((sum, item) => sum + (item.currentProbability / 100) * item.msrp, 0) -
+      avgCostPerSpin
+
+    const bestEVItem =
+      itemStats.length > 0
+        ? itemStats.reduce((max, item) =>
+            item.expectedValue > max.expectedValue ? item : max,
+            itemStats[0],
+          )
+        : null
 
     const availableItems = itemStats.filter((item) => item.remaining > 0)
     const mostLikely =
@@ -313,6 +337,8 @@ export default function PrizeWheelCalculator() {
       recentItems,
       progressPercent,
       bestPrediction,
+      expectedValuePerSpin: expectedReturn,
+      bestEVItem,
       // PNL Stats
       totalRevenue,
       totalCOGS,
@@ -966,7 +992,7 @@ MSRP: $12.99`
 
       {/* Key Indicators Bar */}
       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b px-6 py-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-9 gap-4">
           {/* Most Likely Next */}
           {sessionStats.mostLikelyItem && (
             <div className="bg-white rounded-lg p-3 border-2 border-green-200">
@@ -1099,6 +1125,32 @@ MSRP: $12.99`
               )}
             </div>
           )}
+
+          {/* Average Spin Cost */}
+          <div className="bg-white rounded-lg p-3 border-2 border-cyan-200">
+            <div className="text-xs font-medium text-cyan-700 uppercase tracking-wide">Avg Spin Cost</div>
+            <div className="font-bold text-lg text-cyan-900">${sessionStats.avgCostPerSpin.toFixed(2)}</div>
+            <div className="text-sm text-cyan-600">{sessionStats.totalSpins} spins</div>
+          </div>
+
+          {/* Expected Value */}
+          <div
+            className={`bg-white rounded-lg p-3 border-2 ${sessionStats.expectedValuePerSpin >= 0 ? 'border-green-200' : 'border-red-200'}`}
+          >
+            <div
+              className={`text-xs font-medium uppercase tracking-wide ${sessionStats.expectedValuePerSpin >= 0 ? 'text-green-700' : 'text-red-700'}`}
+            >
+              EV per Spin
+            </div>
+            <div
+              className={`font-bold text-lg ${sessionStats.expectedValuePerSpin >= 0 ? 'text-green-900' : 'text-red-900'}`}
+            >
+              ${sessionStats.expectedValuePerSpin.toFixed(2)}
+            </div>
+            {sessionStats.bestEVItem && (
+              <div className="text-sm text-gray-600">Best: {sessionStats.bestEVItem.name}</div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1300,6 +1352,7 @@ MSRP: $12.99`
                     <TableHead>Remaining</TableHead>
                     <TableHead>Probability</TableHead>
                     <TableHead className="text-right">MSRP</TableHead>
+                    <TableHead className="text-right">EV</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1342,6 +1395,9 @@ MSRP: $12.99`
                           {item.actualDraws > 0 && (
                             <div className="text-xs text-gray-500">COGS: ${item.totalCOGS.toFixed(2)}</div>
                           )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className={`text-sm font-medium ${item.expectedValue >= 0 ? 'text-green-600' : 'text-red-600'}`}>${item.expectedValue.toFixed(2)}</div>
                         </TableCell>
                       </TableRow>
                     )

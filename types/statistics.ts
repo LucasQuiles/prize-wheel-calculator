@@ -22,12 +22,14 @@ export interface ItemStats {
   recentDraws: number
   msrp: number
   totalCOGS: number // Total cost of goods sold for this item
+  expectedValue: number
 }
 
 export interface SessionStats {
   totalSpins: number
   totalCost: number
   avgCostPerSpin: number
+  expectedValuePerSpin: number
   totalItems: number
   itemsDrawn: number
   mostLikelyItem: ItemStats | null
@@ -47,6 +49,7 @@ export interface SessionStats {
   avgCOGSPerItem: number
   mostProfitableItem: ItemStats | null
   leastProfitableItem: ItemStats | null
+  bestEVItem: ItemStats | null
 }
 
 export interface PNLBreakdown {

@@ -13,14 +13,17 @@ pre{font-size:11px;white-space:pre-wrap}
 <body>
 <h3>Whatnot Sniffer</h3>
 
-<h4>Info</h4>
-<table>
-  <tbody id="tblInfo">
-    <tr><td>Host</td><td id="hostName">—</td></tr>
-    <tr><td>Title</td><td id="streamTitle">—</td></tr>
-    <tr><td>Viewers</td><td id="viewerCount">0</td></tr>
-  </tbody>
-</table>
+<section id="info">
+  <h4 id="streamTitle">…</h4>
+  <div id="hostName">Host: —</div>
+</section>
+<section id="stats">
+  <canvas id="viewersSparkline" width="300" height="50"></canvas>
+  <div id="viewerCount">Viewers: 0</div>
+  <div id="bidVelocity">Bids/sec: 0</div>
+  <div id="avgBid">Avg bid: $0.00</div>
+  <div id="rpm">RPM: $0.00</div>
+</section>
 
 <!-- URL entry & Start -->
 <input id="auctionUrl" type="text" placeholder="Auction URL (leave blank to track current tab)" />
@@ -38,6 +41,11 @@ pre{font-size:11px;white-space:pre-wrap}
     <tr><td colspan="2">No items yet…</td></tr>
   </tbody>
 </table>
+
+<section id="breakStats">
+  <h4>Lot Progress</h4>
+  <table id="tblBreaks"><tbody></tbody></table>
+</section>
 
 <!-- Sales -->
 <h4>Sales</h4>
@@ -58,10 +66,20 @@ pre{font-size:11px;white-space:pre-wrap}
 <h4>Bids</h4>
 <table>
   <thead><tr><th>Amount</th><th>Bidder</th></tr></thead>
-  <tbody id="tblBids">
+<tbody id="tblBids">
     <tr><td colspan="2">No bids yet…</td></tr>
   </tbody>
 </table>
+
+<section id="reactions">
+  <h4>Reactions</h4>
+  <div id="reactionGauge"></div>
+</section>
+
+<section id="giveaways">
+  <h4>Giveaways</h4>
+  <div id="giveawayCount">Entries: 0</div>
+</section>
 
 
 <!-- Debug feed -->
