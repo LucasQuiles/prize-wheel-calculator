@@ -175,6 +175,76 @@ function rpm(sales){
   return total/minutes;
 }
 
+function auctionDurations(lines){
+  const map={};
+  lines.forEach(l=>{try{
+    const j=JSON.parse(l);
+    if(j.kind==='ws_event'){
+      if(j.event==='auction_started'){
+        const id=j.payload?.product?.id;
+        if(id) map[id]={start:j.payload?.timestamp||Date.now()};
+      }
+      if(j.event==='auction_ended'){
+        const id=j.payload?.product?.id;
+        if(id) (map[id]=map[id]||{}).end=j.payload?.product?.auctionEndTime||Date.now();
+      }
+    }
+  }catch{}});
+  const durs=Object.values(map).filter(x=>x.start&&x.end).map(x=>(x.end-x.start)/1000);
+  return {
+    perItem:durs,
+    avg:durs.length?durs.reduce((s,c)=>s+c,0)/durs.length:0,
+    lotsPerHour:durs.length?3600/(durs.reduce((s,c)=>s+c,0)/durs.length):0
+  };
+}
+
+function topBuyers(lines,n=5){
+  const spend={};
+  lines.forEach(l=>{try{
+    const j=JSON.parse(l);
+    if(j.kind==='ws_event'&&j.event==='payment_succeeded'){
+      const user=j.payload?.purchaserUser?.username||'—';
+      const price=(j.payload?.soldPrice?.amount||j.payload?.product?.soldPriceCents)/100;
+      if(price>0) spend[user]=(spend[user]||0)+price;
+    }
+  }catch{}});
+  return Object.entries(spend)
+          .sort((a,b)=>b[1]-a[1])
+          .slice(0,n);
+}
+
+function breakVelocity(lines){
+  const hist={};
+  lines.forEach(l=>{try{
+    const j=JSON.parse(l);
+    if(j.kind==='ws_event'&&j.event==='break_updated'){
+      const t=j.payload.title;
+      if(t){
+        (hist[t]=hist[t]||[]).push({
+          t:j.payload.timestamp||Date.now(),
+          f:parseInt(j.payload.filled_break_spots),
+          tot:parseInt(j.payload.total_break_spots)
+        });
+      }
+    }
+  }catch{}});
+  const eta={};
+  Object.entries(hist).forEach(([t,arr])=>{
+    if(arr.length<2) return;
+    const dF=arr[arr.length-1].f-arr[0].f;
+    const dT=(arr[arr.length-1].t-arr[0].t)/60000;
+    const vel=dF/dT;
+    const left=arr[arr.length-1].tot-arr[arr.length-1].f;
+    eta[t]=vel>0?left/vel:Infinity;
+  });
+  return eta;
+}
+
+function reactionsCount(lines){
+  const gauge=parseReactions(lines);
+  return Object.values(gauge).reduce((s,v)=>s+(parseFloat(v)||0),0);
+}
+
 function drawSparkline(canvas, arr){
   const ctx=canvas.getContext('2d');
   ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -275,11 +345,16 @@ function update(){
     const reactions= parseReactions(lines);
     const giveCnt  = parseGiveaways(lines);
     const spinRes  = parseSpinResults(lines);
-
+    const dur      = auctionDurations(lines);
+    const etaMap   = breakVelocity(lines);
     const spinRows = Object.entries(spinRes)
         .map(([res, n]) => `${res}: ${n}`)
         .join(' | ');
     document.getElementById('spinStats').textContent = spinRows || '\u2014';
+    document.getElementById('lotSpeed').textContent =
+      `Lots/hr: ${dur.lotsPerHour.toFixed(1)} (avg ${dur.avg.toFixed(0)}\u202fs)`;
+    document.getElementById('breakEta').textContent =
+      Object.entries(etaMap).map(([t,m])=>`${t}: ${m<1?'<1':m.toFixed(1)}\u202fmin`).join(' | ') || '\u2014';
 
     Object.keys(breakMap).forEach(t=>{
       if (!items.includes(t)) items.push(t);
@@ -337,10 +412,16 @@ function update(){
       drawSparkline(canvas, hist.slice(-50));
     }
 
+    const eng = ((bids.length + reactionsCount(lines)) / Math.max(viewers,1) * 100).toFixed(1);
+    document.getElementById('engIndex').textContent = `Engagement: ${eng}%`;
+
+    document.getElementById('topBuyers').textContent =
+      topBuyers(lines).map(([u$,amt])=>`${u$} \u0024${amt.toFixed(0)}`).join(' | ') || '\u2014';
+
     document.getElementById('giveawayCount').textContent = `Entries: ${giveCnt}`;
     document.getElementById('reactionGauge').innerHTML =
       Object.entries(reactions)
-            .map(([k,v])=>`<div>${k}: ${(v*100).toFixed(1)}%</div>`) 
+            .map(([k,v])=>`<div>${k}: ${(v*100).toFixed(1)}%</div>`)
             .join('');
 
     const dbg = lines.slice(-200).reverse().map(l => {
